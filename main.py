@@ -22,6 +22,9 @@ import threading
 VERSION = "1.0.4"
 LAST_UPDATED = "2024/08/07"
 
+# 処理済みファイルを追跡するためのグローバル辞書
+processed_files = {}
+
 
 class Config:
     def __init__(self):
@@ -142,6 +145,16 @@ def open_error_folder(error_dir):
 
 
 def process_pdf(pdf_path, error_dir, done_dir, status_callback, logger, config):
+    global processed_files
+
+    # ファイルの最終更新時刻を取得
+    file_mtime = os.path.getmtime(pdf_path)
+
+    # このファイルが既に処理済みで、最終更新時刻が同じ場合はスキップ
+    if pdf_path in processed_files and processed_files[pdf_path] == file_mtime:
+        logger.info(f"ファイルは既に処理済みです: {pdf_path}")
+        return
+
     try:
         if not os.path.exists(pdf_path):
             message = f"ファイルが見つかりません: {pdf_path}"
@@ -170,6 +183,9 @@ def process_pdf(pdf_path, error_dir, done_dir, status_callback, logger, config):
             status_callback(message)
             if config.auto_open_error_folder:
                 open_error_folder(error_dir)
+
+        # 処理済みファイルを記録
+        processed_files[pdf_path] = file_mtime
 
     except Exception as e:
         message = f"{os.path.basename(pdf_path)} の処理中にエラーが発生しました: {str(e)}"
@@ -207,7 +223,6 @@ class PDFHandler(FileSystemEventHandler):
             except Exception as e:
                 self.logger.error(f"PDFの処理中にエラーが発生しました: {str(e)}", exc_info=True)
                 self.status_callback(f"PDFの処理中にエラーが発生しました: {str(e)}")
-
 
 class PDFProcessorApp:
     def __init__(self, master):
