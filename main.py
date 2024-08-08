@@ -17,6 +17,7 @@ import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
 import subprocess
+import threading
 
 VERSION = "1.0.4"
 LAST_UPDATED = "2024/08/07"
@@ -201,10 +202,8 @@ class PDFHandler(FileSystemEventHandler):
         if not event.is_directory and event.src_path.lower().endswith('.pdf'):
             self.logger.info(f"新しいPDFファイルを検出: {event.src_path}")
             self.status_callback(f"新しいPDFファイルを検出しました: {event.src_path}")
-            time.sleep(1)
             try:
-                process_pdf(event.src_path, self.error_dir, self.done_dir, self.status_callback, self.logger,
-                            self.config)
+                process_pdf(event.src_path, self.error_dir, self.done_dir, self.status_callback, self.logger, self.config)
             except Exception as e:
                 self.logger.error(f"PDFの処理中にエラーが発生しました: {str(e)}", exc_info=True)
                 self.status_callback(f"PDFの処理中にエラーが発生しました: {str(e)}")
@@ -221,6 +220,7 @@ class PDFProcessorApp:
         self.create_widgets()
         self.observer = None
         self.is_watching = False
+        self.periodic_check_thread = None
 
         self.process_existing_pdfs()
         self.start_watching()
@@ -354,6 +354,8 @@ class PDFProcessorApp:
             self.observer.schedule(event_handler, self.config.processing_dir, recursive=False)
             self.observer.start()
             self.is_watching = True
+            self.periodic_check_thread = threading.Thread(target=self.periodic_check)
+            self.periodic_check_thread.start()
             message = f"{self.config.processing_dir} の監視を開始しました..."
             self.update_status(message)
             self.logger.info(message)
@@ -362,10 +364,25 @@ class PDFProcessorApp:
         if self.observer:
             self.observer.stop()
             self.observer.join()
+        if self.periodic_check_thread:
             self.is_watching = False
-            message = "監視を停止しました。"
-            self.update_status(message)
-            self.logger.info(message)
+            self.periodic_check_thread.join()
+        message = "監視を停止しました。"
+        self.update_status(message)
+        self.logger.info(message)
+
+    def periodic_check(self):
+        while self.is_watching:
+            time.sleep(3)  # 3秒間待機
+            for filename in os.listdir(self.config.processing_dir):
+                if filename.lower().endswith('.pdf'):
+                    pdf_path = os.path.join(self.config.processing_dir, filename)
+                    if os.path.isfile(pdf_path):  # ファイルが存在することを確認
+                        try:
+                            process_pdf(pdf_path, self.config.error_dir, self.config.done_dir, self.update_status, self.logger, self.config)
+                        except Exception as e:
+                            self.logger.error(f"定期チェック中にPDFの処理でエラーが発生しました: {str(e)}", exc_info=True)
+                            self.update_status(f"定期チェック中にPDFの処理でエラーが発生しました: {str(e)}")
 
     def update_status(self, message):
         self.status_text.config(state=tk.NORMAL)
