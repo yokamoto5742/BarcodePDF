@@ -7,24 +7,19 @@ import fitz
 import shutil
 import configparser
 import time
-
 from pyzbar.wrapper import ZBarSymbol
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import ttk
 import logging
 from logging.handlers import TimedRotatingFileHandler
 import os
 import subprocess
 import threading
 
-VERSION = "1.0.4"
-LAST_UPDATED = "2024/08/07"
+VERSION = "1.0.6"
+LAST_UPDATED = "2024/08/08"
 
-# 処理済みファイルを追跡するためのグローバル辞書
 processed_files = {}
-
 
 class Config:
     def __init__(self):
@@ -35,24 +30,9 @@ class Config:
         self.done_dir = self.config['Directories']['done_dir']
         self.log_dir = self.config['Directories'].get('log_dir', 'log')
         self.ui_width = self.config['UI'].getint('width', 600)
-        self.ui_height = self.config['UI'].getint('height', 500)
+        self.ui_height = self.config['UI'].getint('height', 400)
         self.auto_open_error_folder = self.config['Options'].getboolean('auto_open_error_folder', True)
         self.log_retention_days = self.config['Logging'].getint('retention_days', 14)
-        self.use_periodic_check = self.config['Options'].getboolean('use_periodic_check', True)
-        self.periodic_check_interval = self.config['Options'].getint('periodic_check_interval', 3)
-
-    def save(self):
-        self.config['Options'] = {
-            'auto_open_error_folder': str(self.auto_open_error_folder),
-            'use_periodic_check': str(self.use_periodic_check),
-            'periodic_check_interval': str(self.periodic_check_interval)
-        }
-        self.config['Logging'] = {
-            'retention_days': str(self.log_retention_days)
-        }
-        with open('config.ini', 'w') as configfile:
-            self.config.write(configfile)
-
 
 def setup_logger(config):
     if not os.path.exists(config.log_dir):
@@ -209,26 +189,6 @@ def process_pdf(pdf_path, error_dir, done_dir, status_callback, logger, config):
             status_callback(f"ファイルの移動中にエラーが発生しました: {str(move_error)}")
 
 
-class PDFHandler(FileSystemEventHandler):
-    def __init__(self, processing_dir, error_dir, done_dir, status_callback, logger, config):
-        self.processing_dir = processing_dir
-        self.error_dir = error_dir
-        self.done_dir = done_dir
-        self.status_callback = status_callback
-        self.logger = logger
-        self.config = config
-
-    def on_created(self, event):
-        if not event.is_directory and event.src_path.lower().endswith('.pdf'):
-            self.logger.info(f"新しいPDFファイルを検出: {event.src_path}")
-            self.status_callback(f"新しいPDFファイルを検出しました: {event.src_path}")
-            try:
-                process_pdf(event.src_path, self.error_dir, self.done_dir, self.status_callback, self.logger, self.config)
-            except Exception as e:
-                self.logger.error(f"PDFの処理中にエラーが発生しました: {str(e)}", exc_info=True)
-                self.status_callback(f"PDFの処理中にエラーが発生しました: {str(e)}")
-
-
 class PDFProcessorApp:
     def __init__(self, master):
         self.master = master
@@ -238,9 +198,8 @@ class PDFProcessorApp:
 
         self.logger = setup_logger(self.config)
         self.create_widgets()
-        self.observer = None
         self.is_watching = False
-        self.periodic_check_thread = None
+        self.watch_thread = None
 
         self.process_existing_pdfs()
         self.start_watching()
@@ -254,109 +213,25 @@ class PDFProcessorApp:
         self.master.rowconfigure(0, weight=1)
 
         version_info = f"version: {VERSION} (最終更新日: {LAST_UPDATED})"
-        ttk.Label(self.frame, text=version_info, font=("", 10, "bold")).grid(column=0, row=0, columnspan=3, sticky=tk.W)
+        ttk.Label(self.frame, text=version_info, font=("", 10, "bold")).grid(column=0, row=0, columnspan=2, sticky=tk.W)
 
-        ttk.Label(self.frame, text="処理フォルダ:").grid(column=0, row=1, sticky=tk.W)
-        self.processing_dir_label = ttk.Label(self.frame, text=self.config.processing_dir, width=50)
-        self.processing_dir_label.grid(column=1, row=1, sticky=(tk.W, tk.E))
-        ttk.Button(self.frame, text="参照", command=lambda: self.browse_directory('processing_dir')).grid(column=2, row=1)
-
-        ttk.Label(self.frame, text="エラーフォルダ:").grid(column=0, row=2, sticky=tk.W)
-        self.error_dir_label = ttk.Label(self.frame, text=self.config.error_dir, width=50)
-        self.error_dir_label.grid(column=1, row=2, sticky=(tk.W, tk.E))
-        ttk.Button(self.frame, text="参照", command=lambda: self.browse_directory('error_dir')).grid(column=2, row=2)
-
-        ttk.Label(self.frame, text="完了フォルダ:").grid(column=0, row=3, sticky=tk.W)
-        self.done_dir_label = ttk.Label(self.frame, text=self.config.done_dir, width=50)
-        self.done_dir_label.grid(column=1, row=3, sticky=(tk.W, tk.E))
-        ttk.Button(self.frame, text="参照", command=lambda: self.browse_directory('done_dir')).grid(column=2, row=3)
-
-        ttk.Label(self.frame, text="ログフォルダ:").grid(column=0, row=4, sticky=tk.W)
-        self.log_dir_label = ttk.Label(self.frame, text=self.config.log_dir, width=50)
-        self.log_dir_label.grid(column=1, row=4, sticky=(tk.W, tk.E))
-        ttk.Button(self.frame, text="参照", command=lambda: self.browse_directory('log_dir')).grid(column=2, row=4)
-
-        self.auto_open_var = tk.BooleanVar(value=self.config.auto_open_error_folder)
-        self.auto_open_checkbox = ttk.Checkbutton(
-            self.frame,
-            text="エラーフォルダを自動的に開く",
-            variable=self.auto_open_var
-        )
-        self.auto_open_checkbox.grid(column=0, row=5, columnspan=2, sticky=tk.W)
-
-        self.periodic_check_var = tk.BooleanVar(value=self.config.use_periodic_check)
-        self.periodic_check_checkbox = ttk.Checkbutton(
-            self.frame,
-            text="定期チェックを使用",
-            variable=self.periodic_check_var,
-            command=self.toggle_periodic_check
-        )
-        self.periodic_check_checkbox.grid(column=0, row=6, columnspan=2, sticky=tk.W)
-
-        ttk.Button(self.frame, text="設定を保存", command=self.save_config).grid(column=2, row=6, sticky=tk.E)
-
-        self.exit_button = ttk.Button(self.frame, text="閉じる", command=self.quit_app)
-        self.exit_button.grid(column=2, row=7, sticky=tk.E)
-
-        ttk.Label(self.frame, text="ステータス:").grid(column=0, row=8, sticky=tk.W)
+        ttk.Label(self.frame, text="ステータス:").grid(column=0, row=1, sticky=tk.W)
 
         self.status_text = tk.Text(self.frame, height=10, width=70, wrap=tk.WORD)
-        self.status_text.grid(column=0, row=9, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.status_text.grid(column=0, row=2, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.status_text.config(state=tk.DISABLED)
 
         scrollbar = ttk.Scrollbar(self.frame, orient=tk.VERTICAL, command=self.status_text.yview)
-        scrollbar.grid(column=3, row=9, sticky=(tk.N, tk.S))
+        scrollbar.grid(column=2, row=2, sticky=(tk.N, tk.S))
         self.status_text['yscrollcommand'] = scrollbar.set
+
+        self.exit_button = ttk.Button(self.frame, text="閉じる", command=self.quit_app)
+        self.exit_button.grid(column=1, row=3, sticky=tk.E)
 
         for child in self.frame.winfo_children():
             child.grid_configure(padx=5, pady=5)
         self.frame.columnconfigure(1, weight=1)
-        self.frame.rowconfigure(9, weight=1)
-
-    def toggle_periodic_check(self):
-        if self.periodic_check_var.get():
-            self.start_periodic_check()
-        else:
-            self.stop_periodic_check()
-
-    def browse_directory(self, dir_type):
-        directory = filedialog.askdirectory()
-        if directory:
-            if dir_type == 'processing_dir':
-                self.processing_dir_label.config(text=directory)
-            elif dir_type == 'error_dir':
-                self.error_dir_label.config(text=directory)
-            elif dir_type == 'done_dir':
-                self.done_dir_label.config(text=directory)
-            elif dir_type == 'log_dir':
-                self.log_dir_label.config(text=directory)
-
-    def save_config(self):
-        self.config.processing_dir = self.processing_dir_label['text']
-        self.config.error_dir = self.error_dir_label['text']
-        self.config.done_dir = self.done_dir_label['text']
-        self.config.log_dir = self.log_dir_label['text']
-        self.config.auto_open_error_folder = self.auto_open_var.get()
-        self.config.use_periodic_check = self.periodic_check_var.get()
-        self.config.save()
-        self.logger = setup_logger(self.config)
-        messagebox.showinfo("設定保存", "設定が保存されました。")
-        self.logger.info("設定が更新されました")
-
-        self.stop_watching()
-        self.start_watching()
-
-    @staticmethod
-    def open_error_folder(error_dir):
-        try:
-            if os.name == 'nt':  # Windows
-                os.startfile(error_dir)
-            elif os.name == 'posix':  # macOS と Linux
-                subprocess.call(['open', error_dir])
-            else:
-                print(f"エラーフォルダを開けません: {error_dir}")
-        except Exception as e:
-            print(f"エラーフォルダを開く際にエラーが発生しました: {str(e)}")
+        self.frame.rowconfigure(2, weight=1)
 
     def process_existing_pdfs(self):
         self.update_status("フォルダ内のPDFファイルを処理しています...")
@@ -364,65 +239,36 @@ class PDFProcessorApp:
         for filename in os.listdir(self.config.processing_dir):
             if filename.lower().endswith('.pdf'):
                 pdf_path = os.path.join(self.config.processing_dir, filename)
-                process_pdf(pdf_path, self.config.error_dir, self.config.done_dir, self.update_status, self.logger,
-                            self.config)
+                process_pdf(pdf_path, self.config.error_dir, self.config.done_dir, self.update_status, self.logger, self.config)
 
         self.update_status("フォルダ内のPDFファイルの処理が完了しました。")
         self.logger.info("既存のPDFファイルの処理が完了")
 
     def start_watching(self):
         if not self.is_watching:
-            self.observer = Observer()
-            event_handler = PDFHandler(
-                self.config.processing_dir,
-                self.config.error_dir,
-                self.config.done_dir,
-                self.update_status,
-                self.logger,
-                self.config,
-            )
-            self.observer.schedule(event_handler, self.config.processing_dir, recursive=False)
-            self.observer.start()
             self.is_watching = True
-            if self.config.use_periodic_check:
-                self.start_periodic_check()
+            self.watch_thread = threading.Thread(target=self.watch_directory)
+            self.watch_thread.start()
             message = f"{self.config.processing_dir} の監視を開始しました..."
             self.update_status(message)
             self.logger.info(message)
 
-    def start_periodic_check(self):
-        if not self.periodic_check_thread or not self.periodic_check_thread.is_alive():
-            self.periodic_check_thread = threading.Thread(target=self.periodic_check)
-            self.periodic_check_thread.start()
-
-    def stop_periodic_check(self):
-        if self.periodic_check_thread and self.periodic_check_thread.is_alive():
-            self.is_watching = False
-            self.periodic_check_thread.join()
-
     def stop_watching(self):
-        if self.observer:
-            self.observer.stop()
-            self.observer.join()
-        self.stop_periodic_check()
-        self.is_watching = False
-        message = "監視を停止しました。"
-        self.update_status(message)
-        self.logger.info(message)
+        if self.is_watching:
+            self.is_watching = False
+            if self.watch_thread:
+                self.watch_thread.join()
+            message = "監視を停止しました。"
+            self.update_status(message)
+            self.logger.info(message)
 
-    def periodic_check(self):
-        while self.is_watching and self.periodic_check_var.get():
-            time.sleep(self.config.periodic_check_interval)
+    def watch_directory(self):
+        while self.is_watching:
             for filename in os.listdir(self.config.processing_dir):
                 if filename.lower().endswith('.pdf'):
                     pdf_path = os.path.join(self.config.processing_dir, filename)
-                    if os.path.isfile(pdf_path):
-                        try:
-                            process_pdf(pdf_path, self.config.error_dir, self.config.done_dir, self.update_status, self.logger, self.config)
-                        except Exception as e:
-                            self.logger.error(f"定期チェック中にPDFの処理でエラーが発生しました: {str(e)}", exc_info=True)
-                            self.update_status(f"定期チェック中にPDFの処理でエラーが発生しました: {str(e)}")
-
+                    process_pdf(pdf_path, self.config.error_dir, self.config.done_dir, self.update_status, self.logger, self.config)
+            time.sleep(3)  # 3秒間待機
 
     def update_status(self, message):
         self.status_text.config(state=tk.NORMAL)
@@ -438,7 +284,6 @@ class PDFProcessorApp:
 
     def on_closing(self):
         self.quit_app()
-
 
 if __name__ == "__main__":
     root = tk.Tk()
