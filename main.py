@@ -38,10 +38,14 @@ class Config:
         self.ui_height = self.config['UI'].getint('height', 500)
         self.auto_open_error_folder = self.config['Options'].getboolean('auto_open_error_folder', True)
         self.log_retention_days = self.config['Logging'].getint('retention_days', 14)
+        self.use_periodic_check = self.config['Options'].getboolean('use_periodic_check', True)
+        self.periodic_check_interval = self.config['Options'].getint('periodic_check_interval', 3)
 
     def save(self):
         self.config['Options'] = {
-            'auto_open_error_folder': str(self.auto_open_error_folder)
+            'auto_open_error_folder': str(self.auto_open_error_folder),
+            'use_periodic_check': str(self.use_periodic_check),
+            'periodic_check_interval': str(self.periodic_check_interval)
         }
         self.config['Logging'] = {
             'retention_days': str(self.log_retention_days)
@@ -224,6 +228,7 @@ class PDFHandler(FileSystemEventHandler):
                 self.logger.error(f"PDFの処理中にエラーが発生しました: {str(e)}", exc_info=True)
                 self.status_callback(f"PDFの処理中にエラーが発生しました: {str(e)}")
 
+
 class PDFProcessorApp:
     def __init__(self, master):
         self.master = master
@@ -279,25 +284,40 @@ class PDFProcessorApp:
         )
         self.auto_open_checkbox.grid(column=0, row=5, columnspan=2, sticky=tk.W)
 
-        ttk.Button(self.frame, text="設定を保存", command=self.save_config).grid(column=2, row=5, sticky=tk.E)
+        self.periodic_check_var = tk.BooleanVar(value=self.config.use_periodic_check)
+        self.periodic_check_checkbox = ttk.Checkbutton(
+            self.frame,
+            text="定期チェックを使用",
+            variable=self.periodic_check_var,
+            command=self.toggle_periodic_check
+        )
+        self.periodic_check_checkbox.grid(column=0, row=6, columnspan=2, sticky=tk.W)
+
+        ttk.Button(self.frame, text="設定を保存", command=self.save_config).grid(column=2, row=6, sticky=tk.E)
 
         self.exit_button = ttk.Button(self.frame, text="閉じる", command=self.quit_app)
-        self.exit_button.grid(column=2, row=6, sticky=tk.E)
+        self.exit_button.grid(column=2, row=7, sticky=tk.E)
 
-        ttk.Label(self.frame, text="ステータス:").grid(column=0, row=7, sticky=tk.W)
+        ttk.Label(self.frame, text="ステータス:").grid(column=0, row=8, sticky=tk.W)
 
         self.status_text = tk.Text(self.frame, height=10, width=70, wrap=tk.WORD)
-        self.status_text.grid(column=0, row=8, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.status_text.grid(column=0, row=9, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.status_text.config(state=tk.DISABLED)
 
         scrollbar = ttk.Scrollbar(self.frame, orient=tk.VERTICAL, command=self.status_text.yview)
-        scrollbar.grid(column=3, row=8, sticky=(tk.N, tk.S))
+        scrollbar.grid(column=3, row=9, sticky=(tk.N, tk.S))
         self.status_text['yscrollcommand'] = scrollbar.set
 
         for child in self.frame.winfo_children():
             child.grid_configure(padx=5, pady=5)
         self.frame.columnconfigure(1, weight=1)
-        self.frame.rowconfigure(8, weight=1)
+        self.frame.rowconfigure(9, weight=1)
+
+    def toggle_periodic_check(self):
+        if self.periodic_check_var.get():
+            self.start_periodic_check()
+        else:
+            self.stop_periodic_check()
 
     def browse_directory(self, dir_type):
         directory = filedialog.askdirectory()
@@ -316,20 +336,15 @@ class PDFProcessorApp:
         self.config.error_dir = self.error_dir_label['text']
         self.config.done_dir = self.done_dir_label['text']
         self.config.log_dir = self.log_dir_label['text']
-        self.config.config['Directories'] = {
-            'processing_dir': self.config.processing_dir,
-            'error_dir': self.config.error_dir,
-            'done_dir': self.config.done_dir,
-            'log_dir': self.config.log_dir
-        }
         self.config.auto_open_error_folder = self.auto_open_var.get()
-        self.config.config['Options'] = {
-            'auto_open_error_folder': str(self.config.auto_open_error_folder)
-        }
+        self.config.use_periodic_check = self.periodic_check_var.get()
         self.config.save()
         self.logger = setup_logger(self.config)
         messagebox.showinfo("設定保存", "設定が保存されました。")
         self.logger.info("設定が更新されました")
+
+        self.stop_watching()
+        self.start_watching()
 
     @staticmethod
     def open_error_folder(error_dir):
@@ -369,35 +384,45 @@ class PDFProcessorApp:
             self.observer.schedule(event_handler, self.config.processing_dir, recursive=False)
             self.observer.start()
             self.is_watching = True
-            self.periodic_check_thread = threading.Thread(target=self.periodic_check)
-            self.periodic_check_thread.start()
+            if self.config.use_periodic_check:
+                self.start_periodic_check()
             message = f"{self.config.processing_dir} の監視を開始しました..."
             self.update_status(message)
             self.logger.info(message)
+
+    def start_periodic_check(self):
+        if not self.periodic_check_thread or not self.periodic_check_thread.is_alive():
+            self.periodic_check_thread = threading.Thread(target=self.periodic_check)
+            self.periodic_check_thread.start()
+
+    def stop_periodic_check(self):
+        if self.periodic_check_thread and self.periodic_check_thread.is_alive():
+            self.is_watching = False
+            self.periodic_check_thread.join()
 
     def stop_watching(self):
         if self.observer:
             self.observer.stop()
             self.observer.join()
-        if self.periodic_check_thread:
-            self.is_watching = False
-            self.periodic_check_thread.join()
+        self.stop_periodic_check()
+        self.is_watching = False
         message = "監視を停止しました。"
         self.update_status(message)
         self.logger.info(message)
 
     def periodic_check(self):
-        while self.is_watching:
-            time.sleep(3)  # 3秒間待機
+        while self.is_watching and self.periodic_check_var.get():
+            time.sleep(self.config.periodic_check_interval)
             for filename in os.listdir(self.config.processing_dir):
                 if filename.lower().endswith('.pdf'):
                     pdf_path = os.path.join(self.config.processing_dir, filename)
-                    if os.path.isfile(pdf_path):  # ファイルが存在することを確認
+                    if os.path.isfile(pdf_path):
                         try:
                             process_pdf(pdf_path, self.config.error_dir, self.config.done_dir, self.update_status, self.logger, self.config)
                         except Exception as e:
                             self.logger.error(f"定期チェック中にPDFの処理でエラーが発生しました: {str(e)}", exc_info=True)
                             self.update_status(f"定期チェック中にPDFの処理でエラーが発生しました: {str(e)}")
+
 
     def update_status(self, message):
         self.status_text.config(state=tk.NORMAL)
