@@ -34,10 +34,12 @@ class Config:
         self.ui_height = self.config['UI'].getint('height', 500)
         self.auto_open_error_folder = self.config['Options'].getboolean('auto_open_error_folder', True)
         self.log_retention_days = self.config['Logging'].getint('retention_days', 14)
+        self.start_minimized = self.config['Options'].getboolean('start_minimized', True)
 
     def save(self):
         self.config['Options'] = {
-            'auto_open_error_folder': str(self.auto_open_error_folder)
+            'auto_open_error_folder': str(self.auto_open_error_folder),
+            'start_minimized': str(self.start_minimized)
         }
         self.config['Logging'] = {
             'retention_days': str(self.log_retention_days)
@@ -226,6 +228,9 @@ class PDFProcessorApp:
         self.start_watching()
 
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        if self.config.start_minimized:
+            self.master.iconify()
 
     def create_widgets(self):
         self.frame = ttk.Frame(self.master, padding="10")
