@@ -18,8 +18,8 @@ from logging.handlers import TimedRotatingFileHandler
 import os
 import subprocess
 
-VERSION = "1.0.4"
-LAST_UPDATED = "2024/08/07"
+VERSION = "1.0.6"
+LAST_UPDATED = "2024/08/12"
 
 
 class Config:
@@ -385,7 +385,8 @@ class PDFProcessorApp:
         self.master.quit()
 
     def on_closing(self):
-        self.quit_app()
+        if messagebox.askokcancel("終了", "アプリケーションを終了しますか？"):
+            self.quit_app()
 
 
 if __name__ == "__main__":
