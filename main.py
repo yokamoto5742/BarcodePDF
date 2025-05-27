@@ -1,22 +1,23 @@
+import configparser
 import io
+import logging
+import os
+import pathlib
+import shutil
+import subprocess
+import time
+import tkinter as tk
+from logging.handlers import TimedRotatingFileHandler
+from tkinter import filedialog, messagebox, ttk
+
 import cv2
+import fitz
 import numpy as np
 from PIL import Image, ImageEnhance
 from pyzbar.pyzbar import decode
-import fitz
-import shutil
-import configparser
-import time
-
 from pyzbar.wrapper import ZBarSymbol
-from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
-import logging
-from logging.handlers import TimedRotatingFileHandler
-import os
-import subprocess
+from watchdog.observers import Observer
 
 VERSION = "1.0.6"
 LAST_UPDATED = "2024/08/12"
@@ -68,7 +69,6 @@ def extract_images_from_pdf(pdf_path):
     for page_num in range(len(pdf_document)):
         page = pdf_document[page_num]
         image_list = page.get_images(full=True)
-        # 埋め込み画像の抽出と処理
         for img_index, img in enumerate(image_list):
             xref = img[0]
             base_image = pdf_document.extract_image(xref)
@@ -117,7 +117,6 @@ def read_barcode_from_pdf(pdf_path):
                 thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
                 barcodes = decode(thresh, symbols=[ZBarSymbol.CODE128])
 
-            # バーコードが見つかった場合、左上のバーコードを選択
             if barcodes:
                 top_left_barcode = min(barcodes, key=lambda b: b.rect.top + b.rect.left)
                 barcode_data = top_left_barcode.data.decode('utf-8')
@@ -228,9 +227,6 @@ class PDFProcessorApp:
         self.start_watching()
 
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
-
-        if self.config.start_minimized:
-            self.master.iconify()
 
     def create_widgets(self):
         self.frame = ttk.Frame(self.master, padding="10")
