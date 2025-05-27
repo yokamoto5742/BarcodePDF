@@ -11,7 +11,7 @@ def build_executable():
         "pyinstaller",
         "--name=RenamePDF",
         "--windowed",
-        "--icon=assets/RenamePDF.ico",
+        "--icon=assets/BarcodePDF.ico",
         "main.py"
     ])
 
