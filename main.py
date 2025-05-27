@@ -19,7 +19,7 @@ from pyzbar.wrapper import ZBarSymbol
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-VERSION = "1.0.7"
+VERSION = "1.0.8"
 LAST_UPDATED = "2025/05/27"
 
 
