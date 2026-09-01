@@ -29,6 +29,7 @@ from utils.constants import (
     LABEL_STATUS,
     MSG_APP_QUIT,
     MSG_CONFIG_UPDATED,
+    MSG_DIRECTORY_CREATED,
     MSG_EXISTING_PDF_DONE,
     MSG_EXISTING_PDF_START,
     MSG_WATCH_STARTED,
@@ -51,6 +52,7 @@ class PDFProcessorApp:
         self.observer: BaseObserver | None = None
         self.is_watching = False
 
+        self.ensure_directories()
         self.process_existing_pdfs()
         self.start_watching()
 
@@ -118,10 +120,17 @@ class PDFProcessorApp:
         self.config.log_dir = str(self.log_dir_label['text'])
         self.config.auto_open_error_folder = self.auto_open_var.get()
         self.config.save()
+        self.ensure_directories()
 
         setup_logging(self.config.config)
         messagebox.showinfo(DIALOG_SAVE_CONFIG_TITLE, DIALOG_SAVE_CONFIG_MESSAGE)
         logger.info(MSG_CONFIG_UPDATED)
+
+    def ensure_directories(self) -> None:
+        for directory in self.config.ensure_directories():
+            message = MSG_DIRECTORY_CREATED.format(directory=directory)
+            logger.info(message)
+            self.update_status(message)
 
     def process_existing_pdfs(self) -> None:
         logger.info(MSG_EXISTING_PDF_START)

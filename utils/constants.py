@@ -20,6 +20,7 @@ DIALOG_QUIT_TITLE = "終了"
 DIALOG_QUIT_MESSAGE = "アプリケーションを終了しますか？"
 
 MSG_CONFIG_UPDATED = "設定が更新されました"
+MSG_DIRECTORY_CREATED = "フォルダを作成しました: {directory}"
 MSG_EXISTING_PDF_START = "フォルダ内のPDFファイルを処理しています..."
 MSG_EXISTING_PDF_DONE = "フォルダ内のPDFファイルの処理が完了しました。"
 MSG_WATCH_STARTED = "{directory} の監視を開始しました..."

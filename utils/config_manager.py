@@ -65,6 +65,15 @@ class AppConfig:
         )
         self.start_minimized: bool = self.config.getboolean('Options', 'start_minimized', fallback=True)
 
+    def ensure_directories(self) -> list[str]:
+        """処理・エラー・完了フォルダを作成し、新規作成したパスを返す"""
+        created: list[str] = []
+        for directory in (self.processing_dir, self.error_dir, self.done_dir):
+            if not os.path.isdir(directory):
+                os.makedirs(directory, exist_ok=True)
+                created.append(directory)
+        return created
+
     def save(self) -> None:
         self.config['Directories']['processing_dir'] = self.processing_dir
         self.config['Directories']['error_dir'] = self.error_dir

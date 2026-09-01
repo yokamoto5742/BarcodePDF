@@ -4,8 +4,8 @@ import io
 import logging
 
 import cv2
-import fitz
 import numpy as np
+import pymupdf
 from PIL import Image, ImageEnhance
 from pyzbar.pyzbar import decode
 from pyzbar.wrapper import ZBarSymbol
@@ -24,7 +24,7 @@ def _to_enhanced_grayscale(image: Image.Image) -> Image.Image:
 
 def extract_images_from_pdf(pdf_path: str) -> list[Image.Image]:
     images: list[Image.Image] = []
-    pdf_document = fitz.open(pdf_path)
+    pdf_document = pymupdf.open(pdf_path)
 
     for page in pdf_document:
         for img in page.get_images(full=True):
