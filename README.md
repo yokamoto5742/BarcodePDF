@@ -89,7 +89,6 @@ uv run python main.py
 processing_dir = C:\Shinseikai\BarcodePDF\processing
 error_dir = C:\Shinseikai\BarcodePDF\error
 done_dir = C:\pdfkarte\TmpPdf
-log_dir = C:\Shinseikai\BarcodePDF\log
 
 [UI]
 width = 600
@@ -99,8 +98,11 @@ height = 500
 auto_open_error_folder = True
 start_minimized = True
 
-[Logging]
-retention_days = 14
+[LOGGING]
+log_directory = C:\Shinseikai\BarcodePDF\log
+log_retention_days = 7
+log_level = INFO
+project_name = BarcodePDF
 ```
 
 ### 設定項目の説明
@@ -108,11 +110,12 @@ retention_days = 14
 - `processing_dir`: 処理対象PDFファイルの監視フォルダ
 - `error_dir`: エラーファイルの保存先
 - `done_dir`: 処理済みファイルの保存先
-- `log_dir`: ログファイルの保存先
 - `width`/`height`: アプリウィンドウのサイズ
 - `auto_open_error_folder`: エラー時のフォルダ自動表示
 - `start_minimized`: 最小化で起動
-- `retention_days`: ログファイルの保持日数
+- `log_directory`: ログファイルの保存先
+- `log_retention_days`: ログファイルの保持日数
+- `log_level`: ログ出力レベル（DEBUG/INFO/WARNING/ERROR）
 
 ## ログ機能
 
@@ -123,6 +126,27 @@ retention_days = 14
   - バーコード検出結果
   - エラー情報
   - 設定変更履歴
+  - トレース行（どのファイルをどこへ送ったか）
+
+### トレースログ
+
+処理を終えたファイルごとに、移動元・バーコード・移動先を1行で記録します。
+
+```
+2026-09-01 18:30:12,345 - service.pdf_processor - INFO - TRACE result=SUCCESS src=C:\Shinseikai\BarcodePDF\processing\scan001.pdf barcode=1234567890 dst=C:\pdfkarte\TmpPdf\1234567890.pdf
+2026-09-01 18:31:05,120 - service.pdf_processor - INFO - TRACE result=NO_BARCODE src=C:\Shinseikai\BarcodePDF\processing\scan002.pdf barcode= dst=C:\Shinseikai\BarcodePDF\error\scan002.pdf
+```
+
+- `result`: `SUCCESS`（完了フォルダへ移動）/ `NO_BARCODE`（バーコード未検出）/ `ERROR`（処理中に例外）
+- `src`: 移動元のフルパス
+- `barcode`: 読み取れたバーコード内容（読めなかった場合は空）
+- `dst`: 移動先のフルパス（移動できなかった場合は空）
+
+`TRACE` で絞り込めば、処理したファイルの送り先を一覧できます。
+
+```bash
+findstr TRACE C:\Shinseikai\BarcodePDF\log\BarcodePDF.log
+```
 
 ## トラブルシューティング
 
@@ -153,15 +177,17 @@ retention_days = 14
 ### アーキテクチャ
 
 ```
-main.py
-├── Config クラス         : 設定管理
-├── PDFProcessorApp クラス : メインアプリケーション
-├── PDFHandler クラス     : ファイルシステム監視
-└── 各種関数
-    ├── extract_images_from_pdf : PDF画像抽出
-    ├── read_barcode_from_pdf   : バーコード読み取り
-    ├── process_pdf             : PDF処理メイン
-    └── setup_logger           : ログ設定
+main.py                       : エントリポイント
+├── app/
+│   ├── __init__.py           : __version__（GUIのバージョン表示元）
+│   └── main_window.py        : PDFProcessorApp（GUIとフォルダ監視の起動）
+├── service/
+│   ├── barcode_reader.py     : PDFの画像抽出とCODE128読み取り
+│   └── pdf_processor.py      : process_pdf / PDFHandler（振り分けとトレースログ）
+└── utils/
+    ├── config_manager.py     : ConfigManager / AppConfig（config.ini の読み書き）
+    ├── log_rotation.py       : setup_logging（日次ローテーションと古いログの削除）
+    └── constants.py          : UI・ログメッセージの定数
 ```
 
 ### 主要なライブラリ
@@ -176,15 +202,15 @@ main.py
 
 バーコード形式を変更する場合：
 ```python
-# read_barcode_from_pdf 関数内
+# service/barcode_reader.py の _decode_code128 関数内
 barcodes = decode(gray, symbols=[ZBarSymbol.CODE128])
 # 他の形式: ZBarSymbol.CODE39, ZBarSymbol.QRCODE など
 ```
 
 画像処理の調整：
 ```python
-# コントラスト強調の値を変更
-enhancer.enhance(2.0)  # 2.0を他の値に変更
+# service/barcode_reader.py のコントラスト強調の値を変更
+CONTRAST_FACTOR = 2.0
 ```
 
 ## ライセンス

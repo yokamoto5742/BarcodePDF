@@ -48,6 +48,32 @@ class ConfigManager:
             self.config[section] = {}
 
 
+class AppConfig:
+    """config.ini のアプリ設定を型付きで読み書きする"""
+
+    def __init__(self, config_file: Path | str = CONFIG_PATH) -> None:
+        self._manager: ConfigManager = ConfigManager(config_file)
+        self.config: configparser.ConfigParser = self._manager.config
+        self.processing_dir: str = self.config.get('Directories', 'processing_dir')
+        self.error_dir: str = self.config.get('Directories', 'error_dir')
+        self.done_dir: str = self.config.get('Directories', 'done_dir')
+        self.log_dir: str = self.config.get('LOGGING', 'log_directory', fallback='logs')
+        self.ui_width: int = self.config.getint('UI', 'width', fallback=600)
+        self.ui_height: int = self.config.getint('UI', 'height', fallback=500)
+        self.auto_open_error_folder: bool = self.config.getboolean(
+            'Options', 'auto_open_error_folder', fallback=True
+        )
+        self.start_minimized: bool = self.config.getboolean('Options', 'start_minimized', fallback=True)
+
+    def save(self) -> None:
+        self.config['Directories']['processing_dir'] = self.processing_dir
+        self.config['Directories']['error_dir'] = self.error_dir
+        self.config['Directories']['done_dir'] = self.done_dir
+        self.config['LOGGING']['log_directory'] = self.log_dir
+        self.config['Options']['auto_open_error_folder'] = str(self.auto_open_error_folder)
+        self._manager.save_config()
+
+
 def load_config() -> configparser.ConfigParser:
     return ConfigManager().config
 

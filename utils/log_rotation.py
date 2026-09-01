@@ -20,7 +20,7 @@ def setup_logging(config: configparser.ConfigParser | None = None) -> None:
 
         log_directory = str(log_directory_value if log_directory_value is not None else 'logs')
         log_retention_days = int(log_retention_days_value if log_retention_days_value is not None else 7)  # type: ignore
-        project_name = str(project_name_value if project_name_value is not None else 'VoiceScribe')
+        project_name = str(project_name_value if project_name_value is not None else 'BarcodePDF')
         log_level = str(log_level_value if log_level_value is not None else 'INFO')
 
         if not os.path.isabs(log_directory):
@@ -44,6 +44,11 @@ def setup_logging(config: configparser.ConfigParser | None = None) -> None:
         file_handler.setFormatter(formatter)
 
         root_logger = logging.getLogger()
+
+        # 設定変更後の再初期化でハンドラが重複しないよう既存分を除去する
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+            handler.close()
 
         try:
             level = getattr(logging, log_level.upper())
