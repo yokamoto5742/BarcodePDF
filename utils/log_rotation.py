@@ -15,7 +15,7 @@ def setup_logging(config: configparser.ConfigParser | None = None) -> None:
     try:
         log_directory_value = get_config_value(config, 'LOGGING', 'log_directory', 'logs')
         log_retention_days_value = get_config_value(config, 'LOGGING', 'log_retention_days', 7)
-        project_name_value = get_config_value(config, 'LOGGING', 'project_name', 'VoiceScribe')
+        project_name_value = get_config_value(config, 'LOGGING', 'project_name', 'BarcodePDF')
         log_level_value = get_config_value(config, 'LOGGING', 'log_level', 'INFO')
 
         log_directory = str(log_directory_value if log_directory_value is not None else 'logs')
