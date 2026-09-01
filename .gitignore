@@ -1,2 +1,10 @@
 build/
 dist/
+logs/
+.idea/
+__pycache__/
+
+.env
+.coverage
+*.spec
+*.iml

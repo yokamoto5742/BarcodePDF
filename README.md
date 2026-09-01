@@ -36,7 +36,7 @@ pip install watchdog
 ## インストールと初期設定
 
 1. **ファイルの準備**
-   - `main.py`、`config.ini`をダウンロード
+   - `main.py`、`utils/config.ini`をダウンロード
    - 同じフォルダに配置
 
 2. **必要なフォルダの作成**
@@ -49,7 +49,7 @@ pip install watchdog
    ```
 
 3. **設定ファイルの調整**
-   - `config.ini`でフォルダパスを環境に合わせて修正
+   - `utils/config.ini`でフォルダパスを環境に合わせて修正
 
 ## 使い方
 

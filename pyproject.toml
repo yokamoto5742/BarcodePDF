@@ -1,0 +1,23 @@
+[project]
+name = "barcodepdf"
+version = "1.0.0"
+requires-python = ">=3.13"
+
+dependencies = [
+    "numpy>=1.24.4",
+    "opencv-python-headless>=4.10.0.84",
+    "pillow>=10.4.0",
+    "pymupdf>=1.24.7",
+    "pyzbar>=0.1.9",
+    "watchdog>=4.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "coverage>=7.10.1",
+    "pyinstaller>=6.14.2",
+    "pyright>=1.1.407",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+]
