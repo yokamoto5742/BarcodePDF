@@ -17,27 +17,25 @@ BarcodePDFは、PDFファイルからバーコードを自動的に読み取り�
 ## 必要な環境
 
 ### Python
-- Python 3.11
+- Python 3.13 以上
 
 ### 必要なライブラリ
-以下のライブラリをインストールする必要があります：
+依存関係は `pyproject.toml` と `uv.lock` で管理しています。[uv](https://docs.astral.sh/uv/) で一括インストールしてください：
 
 ```bash
-pip install opencv-python
-pip install PyMuPDF
-pip install Pillow
-pip install pyzbar
-pip install watchdog
+uv sync
 ```
+
+主な依存: opencv-python-headless / PyMuPDF / Pillow / pyzbar / watchdog / numpy
 
 ### システム要件
 - **Windows**: Windows 10 64ビット以上推奨
-- 
+
 ## インストールと初期設定
 
 1. **ファイルの準備**
-   - `main.py`、`utils/config.ini`をダウンロード
-   - 同じフォルダに配置
+   - リポジトリをクローンし、`uv sync` で依存をインストール
+   - `utils/config.ini` が同梱されていることを確認
 
 2. **必要なフォルダの作成**
    ```
@@ -56,7 +54,7 @@ pip install watchdog
 ### 1. アプリケーションの起動
 
 ```bash
-python main.py
+uv run python main.py
 ```
 
 ### 2. 設定画面での操作

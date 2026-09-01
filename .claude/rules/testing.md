@@ -1,7 +1,3 @@
----
-description: テスト実行コマンドとテスト方針
----
-
 ## テスト実行コマンド
 
 ```bash
@@ -9,11 +5,11 @@ description: テスト実行コマンドとテスト方針
 .venv\Scripts\python.exe -m pytest tests/ -v --tb=short
 
 # 単一ファイル
-.venv\Scripts\python.exe -m pytest tests/service/test_keep_doc_merge.py -v
+.venv\Scripts\python.exe -m pytest tests/service/test_barcode_reader.py -v
 
 # 単一テスト
-.venv\Scripts\python.exe -m pytest tests/service/test_keep_doc_merge.py::test_merge_memo_trashes_copy_after_merge -v
+.venv\Scripts\python.exe -m pytest tests/service/test_barcode_reader.py::test_read_code128 -v
 
 # カバレッジ付き
-.venv\Scripts\python.exe -m pytest tests/ -v --tb=short --cov=app --cov-report=html
+.venv\Scripts\python.exe -m pytest tests/ -v --tb=short --cov=app --cov=service --cov=utils --cov-report=html
 ```
