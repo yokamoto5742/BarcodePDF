@@ -1,7 +1,6 @@
 """UI表示とログ出力に使用するメッセージ定数"""
 
 APP_TITLE = "BarcodePDF"
-VERSION_LABEL = "version: {version}"
 
 LABEL_PROCESSING_DIR = "処理フォルダ:"
 LABEL_ERROR_DIR = "エラーフォルダ:"

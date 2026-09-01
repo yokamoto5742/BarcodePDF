@@ -34,7 +34,6 @@ from utils.constants import (
     MSG_EXISTING_PDF_START,
     MSG_WATCH_STARTED,
     MSG_WATCH_STOPPED,
-    VERSION_LABEL,
 )
 from utils.log_rotation import setup_logging
 
@@ -44,7 +43,7 @@ logger = logging.getLogger(__name__)
 class PDFProcessorApp:
     def __init__(self, master: tk.Tk) -> None:
         self.master = master
-        self.master.title(APP_TITLE)
+        self.master.title(f"{APP_TITLE} v{__version__}")
         self.config = AppConfig()
         self.master.geometry(f"{self.config.ui_width}x{self.config.ui_height}")
 
@@ -64,39 +63,35 @@ class PDFProcessorApp:
         self.master.columnconfigure(0, weight=1)
         self.master.rowconfigure(0, weight=1)
 
-        ttk.Label(
-            self.frame, text=VERSION_LABEL.format(version=__version__), font=("", 10, "bold")
-        ).grid(column=0, row=0, columnspan=3, sticky=tk.W)
-
-        self.processing_dir_label = self._create_directory_row(LABEL_PROCESSING_DIR, self.config.processing_dir, 1)
-        self.error_dir_label = self._create_directory_row(LABEL_ERROR_DIR, self.config.error_dir, 2)
-        self.done_dir_label = self._create_directory_row(LABEL_DONE_DIR, self.config.done_dir, 3)
-        self.log_dir_label = self._create_directory_row(LABEL_LOG_DIR, self.config.log_dir, 4)
+        self.processing_dir_label = self._create_directory_row(LABEL_PROCESSING_DIR, self.config.processing_dir, 0)
+        self.error_dir_label = self._create_directory_row(LABEL_ERROR_DIR, self.config.error_dir, 1)
+        self.done_dir_label = self._create_directory_row(LABEL_DONE_DIR, self.config.done_dir, 2)
+        self.log_dir_label = self._create_directory_row(LABEL_LOG_DIR, self.config.log_dir, 3)
 
         self.auto_open_var = tk.BooleanVar(value=self.config.auto_open_error_folder)
         ttk.Checkbutton(
             self.frame,
             text=CHECKBOX_AUTO_OPEN_ERROR_FOLDER,
             variable=self.auto_open_var,
-        ).grid(column=0, row=5, columnspan=2, sticky=tk.W)
+        ).grid(column=0, row=4, columnspan=2, sticky=tk.W)
 
-        ttk.Button(self.frame, text=BUTTON_SAVE_CONFIG, command=self.save_config).grid(column=2, row=5, sticky=tk.E)
-        ttk.Button(self.frame, text=BUTTON_CLOSE, command=self.quit_app).grid(column=2, row=6, sticky=tk.E)
+        ttk.Button(self.frame, text=BUTTON_SAVE_CONFIG, command=self.save_config).grid(column=2, row=4, sticky=tk.E)
+        ttk.Button(self.frame, text=BUTTON_CLOSE, command=self.quit_app).grid(column=2, row=5, sticky=tk.E)
 
-        ttk.Label(self.frame, text=LABEL_STATUS).grid(column=0, row=7, sticky=tk.W)
+        ttk.Label(self.frame, text=LABEL_STATUS).grid(column=0, row=6, sticky=tk.W)
 
         self.status_text = tk.Text(self.frame, height=10, width=70, wrap=tk.WORD)
-        self.status_text.grid(column=0, row=8, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.status_text.grid(column=0, row=7, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.status_text.config(state=tk.DISABLED)
 
         scrollbar = ttk.Scrollbar(self.frame, orient=tk.VERTICAL, command=self.status_text.yview)
-        scrollbar.grid(column=3, row=8, sticky=(tk.N, tk.S))
+        scrollbar.grid(column=3, row=7, sticky=(tk.N, tk.S))
         self.status_text['yscrollcommand'] = scrollbar.set
 
         for child in self.frame.winfo_children():
             cast(tk.Widget, child).grid_configure(padx=5, pady=5)
         self.frame.columnconfigure(1, weight=1)
-        self.frame.rowconfigure(8, weight=1)
+        self.frame.rowconfigure(7, weight=1)
 
     def _create_directory_row(self, label_text: str, directory: str, row: int) -> ttk.Label:
         ttk.Label(self.frame, text=label_text).grid(column=0, row=row, sticky=tk.W)
