@@ -38,12 +38,12 @@ class ConfigManager:
             with open(self.config_file, 'w', encoding='utf-8') as configfile:
                 self.config.write(configfile)
         except (IOError, OSError) as e:
-            raise OSError(f"Failed to load config: {e}") from e
+            raise OSError(f"Failed to save config: {e}") from e
 
     def get_path(self, key: str) -> Path:
         return Path(self.config.get('Paths', key))
 
-    def _ensure_section(self, section: str) -> None:
+    def ensure_section(self, section: str) -> None:
         if section not in self.config:
             self.config[section] = {}
 
@@ -75,6 +75,9 @@ class AppConfig:
         return created
 
     def save(self) -> None:
+        for section in ('Directories', 'LOGGING', 'Options'):
+            self._manager.ensure_section(section)
+
         self.config['Directories']['processing_dir'] = self.processing_dir
         self.config['Directories']['error_dir'] = self.error_dir
         self.config['Directories']['done_dir'] = self.done_dir

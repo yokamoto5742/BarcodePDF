@@ -50,10 +50,11 @@ def setup_logging(config: configparser.ConfigParser | None = None) -> None:
             root_logger.removeHandler(handler)
             handler.close()
 
-        try:
-            level = getattr(logging, log_level.upper())
+        # logging には int 以外の属性もあるため、レベル値であることまで確認する
+        level = getattr(logging, log_level.upper(), None)
+        if isinstance(level, int):
             root_logger.setLevel(level)
-        except AttributeError:
+        else:
             root_logger.setLevel(logging.INFO)
             logging.warning(f"無効なログレベル '{log_level}' が指定されました。INFOを使用します。")
 

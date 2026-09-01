@@ -24,33 +24,21 @@ def _to_enhanced_grayscale(image: Image.Image) -> Image.Image:
 
 def extract_images_from_pdf(pdf_path: str) -> list[Image.Image]:
     images: list[Image.Image] = []
-    pdf_document = pymupdf.open(pdf_path)
 
-    for page in pdf_document:
-        for img in page.get_images(full=True):
-            base_image = pdf_document.extract_image(img[0])
-            embedded_image = Image.open(io.BytesIO(base_image["image"]))
-            images.append(_to_enhanced_grayscale(embedded_image))
+    # 破損PDFで例外が起きてもファイルハンドルを解放するためwith文を使う
+    with pymupdf.open(pdf_path) as pdf_document:
+        for page in pdf_document:
+            for img in page.get_images(full=True):
+                base_image = pdf_document.extract_image(img[0])
+                embedded_image = Image.open(io.BytesIO(base_image["image"]))
+                images.append(_to_enhanced_grayscale(embedded_image))
 
-        # 埋め込み画像から読めない場合に備え、ページ全体のレンダリング結果も対象にする
-        pix = page.get_pixmap()
-        page_image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-        images.append(_to_enhanced_grayscale(page_image))
+            # 埋め込み画像から読めない場合に備え、ページ全体のレンダリング結果も対象にする
+            pix = page.get_pixmap()
+            page_image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            images.append(_to_enhanced_grayscale(page_image))
 
-    pdf_document.close()
     return images
-
-
-def _to_grayscale_array(image: Image.Image) -> np.ndarray | None:
-    array = np.array(image)
-
-    if len(array.shape) == 2:
-        return array
-    if len(array.shape) == 3:
-        if array.shape[2] == 4:
-            array = cv2.cvtColor(array, cv2.COLOR_RGBA2BGR)
-        return cv2.cvtColor(array, cv2.COLOR_BGR2GRAY)
-    return None
 
 
 def _decode_code128(gray: np.ndarray) -> str | None:
@@ -71,12 +59,9 @@ def _decode_code128(gray: np.ndarray) -> str | None:
 
 def read_barcode_from_pdf(pdf_path: str) -> str | None:
     for image in extract_images_from_pdf(pdf_path):
-        gray = _to_grayscale_array(image)
-        if gray is None:
-            continue
-
         try:
-            barcode_data = _decode_code128(gray)
+            # extract_images_from_pdf がグレースケール化済みのため2次元配列になる
+            barcode_data = _decode_code128(np.array(image))
             if barcode_data:
                 return barcode_data
         except Exception as e:
