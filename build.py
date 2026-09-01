@@ -8,6 +8,7 @@ def build_executable():
         "--windowed",
         "--icon=assets/BarcodePDF.ico",
         "--add-data", "utils/config.ini:.",
+        "--collect-binaries", "pyzbar",
         "main.py"
     ])
 
