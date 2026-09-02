@@ -6,7 +6,7 @@ BarcodePDFは、PDFファイルからバーコードを自動的に読み取り�
 
 ## 主な機能
 
-- **自動バーコード検出**: PDFファイル内の画像からCODE128バーコードを検出
+- **自動バーコード検出**: PDFファイルの上部帯からCODE128バーコードを自動検出（高解像度処理）
 - **ファイル名自動変更**: 検出したバーコードの内容でPDFファイル名を変更
 - **フォルダ監視**: 指定フォルダを監視し、新しいファイルを自動処理
 - **GUI設定画面**: 直感的な設定インターフェース
@@ -153,9 +153,11 @@ findstr TRACE C:\Shinseikai\BarcodePDF\log\BarcodePDF.log
 ### よくある問題
 
 **Q: バーコードが検出されない**
-- PDFの解像度が低い場合があります
-- バーコードがCODE128形式か確認してください
-- 画像の品質を向上させてから再試行
+- バーコードは必ずCODE128形式である必要があります（QRコード等には非対応）
+- バーコードはPDFページの上部15%以内に配置してください（下部のバーコードは読み込まれません）
+- バーコード幅がページ幅の20%以上である必要があります（細いバーコードは検出されません）
+- PDFが破損していないか確認してください
+- 複数のバーコードがある場合は、最も幅の広いものが採用されます
 
 **Q: フォルダが監視されない**
 - フォルダパスが正しいか確認
@@ -182,7 +184,8 @@ main.py                       : エントリポイント
 │   ├── __init__.py           : __version__（GUIのバージョン表示元）
 │   └── main_window.py        : PDFProcessorApp（GUIとフォルダ監視の起動）
 ├── service/
-│   ├── barcode_reader.py     : PDFの画像抽出とCODE128読み取り
+│   ├── barcode_reader.py     : PDFの上部帯をレンダリングしてCODE128読み取り
+│   │                           (高解像度・ノイズ除去・最大幅優先)
 │   └── pdf_processor.py      : process_pdf / PDFHandler（振り分けとトレースログ）
 └── utils/
     ├── config_manager.py     : ConfigManager / AppConfig（config.ini の読み書き）
@@ -200,23 +203,21 @@ main.py                       : エントリポイント
 
 ### カスタマイズ
 
-バーコード形式を変更する場合：
+バーコード読み取り処理の詳細設定は `service/barcode_reader.py` 内の定数を調整してください：
+
 ```python
-# service/barcode_reader.py の _decode_code128 関数内
-barcodes = decode(gray, symbols=[ZBarSymbol.CODE128])
-# 他の形式: ZBarSymbol.CODE39, ZBarSymbol.QRCODE など
+CONTRAST_FACTOR = 2.0           # コントラスト強調の度合い（高いほど細いバーが強調される）
+RENDER_ZOOM = 3.0               # PDFレンダリング時の拡大率（72dpi基準）
+TOP_BAND_RATIO = 0.15           # ページ上端から探索する高さの割合（15%）
+MIN_BARCODE_WIDTH_RATIO = 0.20  # 採用するバーコードの最小幅（ページ幅の20%以上）
 ```
 
-画像処理の調整：
-```python
-# service/barcode_reader.py のコントラスト強調の値を変更
-CONTRAST_FACTOR = 2.0
-```
+読み取り対象のバーコード形式は現在 **CODE128 のみ** です。他の形式に対応させる場合は、`_decode_code128` 関数を修正してください。
 
 ## ライセンス
 
-このプロジェクトはオープンソースです。詳細については、プロジェクトのライセンスファイルを参照してください。
+このプロジェクトのライセンス情報については、 [LICENSE](docs/LICENSE) を参照してください。
 
-## サポート
+## 更新履歴
 
-技術的な問題や機能要求については、プロジェクトのIssuesページで報告してください。
+更新履歴は [CHANGELOG.md](docs/CHANGELOG.md) を参照してください
