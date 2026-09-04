@@ -26,6 +26,9 @@ MSG_WATCH_STARTED = "{directory} の監視を開始しました..."
 MSG_WATCH_STOPPED = "監視を停止しました。"
 MSG_APP_QUIT = "アプリケーションを終了します"
 
+MSG_FILE_MOVED = "移動しました: {source} -> {destination}"
+MSG_FILE_MOVE_ERROR = "{filename} の移動中にエラーが発生しました: {error}"
+
 MSG_PDF_DETECTED = "新しいPDFファイルを検出しました: {path}"
 MSG_PROCESSING_START = "PDFの処理を開始: {path}"
 MSG_FILE_NOT_FOUND = "ファイルが見つかりません: {path}"

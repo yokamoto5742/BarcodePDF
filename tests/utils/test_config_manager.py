@@ -16,6 +16,7 @@ from utils.config_manager import (
 )
 
 MINIMAL_INI = """[Directories]
+target_dir = C:\\target
 processing_dir = C:\\in
 error_dir = C:\\err
 done_dir = C:\\done
@@ -107,6 +108,7 @@ def test_save_config_reports_save_failure(config_file: Path, mocker: MockerFixtu
 
 
 def test_app_config_reads_typed_values(app_config: AppConfig, tmp_path: Path) -> None:
+    assert app_config.target_dir == str(tmp_path / 'target')
     assert app_config.processing_dir == str(tmp_path / 'processing')
     assert app_config.error_dir == str(tmp_path / 'error')
     assert app_config.done_dir == str(tmp_path / 'done')

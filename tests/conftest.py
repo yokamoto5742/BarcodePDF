@@ -8,6 +8,7 @@ import pytest
 from utils.config_manager import AppConfig
 
 CONFIG_TEMPLATE = """[Directories]
+target_dir = {target_dir}
 processing_dir = {processing_dir}
 error_dir = {error_dir}
 done_dir = {done_dir}
@@ -32,12 +33,13 @@ project_name = BarcodePDF
 @pytest.fixture
 def config_file(tmp_path: Path) -> Path:
     """作業フォルダを実作成し、それらを指すconfig.iniのパスを返す"""
-    for name in ('processing', 'error', 'done', 'log'):
+    for name in ('target', 'processing', 'error', 'done', 'log'):
         (tmp_path / name).mkdir()
 
     path = tmp_path / 'config.ini'
     path.write_text(
         CONFIG_TEMPLATE.format(
+            target_dir=tmp_path / 'target',
             processing_dir=tmp_path / 'processing',
             error_dir=tmp_path / 'error',
             done_dir=tmp_path / 'done',

@@ -54,6 +54,7 @@ class AppConfig:
     def __init__(self, config_file: Path | str = CONFIG_PATH) -> None:
         self._manager: ConfigManager = ConfigManager(config_file)
         self.config: configparser.ConfigParser = self._manager.config
+        self.target_dir: str = self.config.get('Directories', 'target_dir')
         self.processing_dir: str = self.config.get('Directories', 'processing_dir')
         self.error_dir: str = self.config.get('Directories', 'error_dir')
         self.done_dir: str = self.config.get('Directories', 'done_dir')
@@ -66,9 +67,9 @@ class AppConfig:
         self.start_minimized: bool = self.config.getboolean('Options', 'start_minimized', fallback=True)
 
     def ensure_directories(self) -> list[str]:
-        """処理・エラー・完了フォルダを作成し、新規作成したパスを返す"""
+        """監視・処理・エラー・完了フォルダを作成し、新規作成したパスを返す"""
         created: list[str] = []
-        for directory in (self.processing_dir, self.error_dir, self.done_dir):
+        for directory in (self.target_dir, self.processing_dir, self.error_dir, self.done_dir):
             if not os.path.isdir(directory):
                 os.makedirs(directory, exist_ok=True)
                 created.append(directory)
@@ -78,6 +79,7 @@ class AppConfig:
         for section in ('Directories', 'LOGGING', 'Options'):
             self._manager.ensure_section(section)
 
+        self.config['Directories']['target_dir'] = self.target_dir
         self.config['Directories']['processing_dir'] = self.processing_dir
         self.config['Directories']['error_dir'] = self.error_dir
         self.config['Directories']['done_dir'] = self.done_dir
