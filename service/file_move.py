@@ -1,96 +1,118 @@
-"""target_dir に入ったファイルを processing_dir へ自動的に移動する常駐スクリプト
+"""target_dir に入ったPDFを processing_dir へ移動するフォルダ監視
 
-実行方法:
-    .venv\\Scripts\\python.exe -m scripts.file_move
+スキャナーによってはスキャン直後にファイル名を変更するため、ファイルイベントに依存すると
+移動元が消えて取りこぼす。サイズと更新日時が前回走査から変化していないことを確認してから
+移動することで、リネームや書き込み途中のファイルを避ける。
 """
 
 import logging
 import os
 import shutil
-import sys
-import time
-from pathlib import Path
-
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
-from watchdog.observers import Observer
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import threading
+from collections.abc import Callable
 
 from utils.config_manager import AppConfig
-from utils.constants import (
-    MSG_DIRECTORY_CREATED,
-    MSG_FILE_MOVE_ERROR,
-    MSG_FILE_MOVED,
-    MSG_WATCH_STARTED,
-    MSG_WATCH_STOPPED,
-)
+from utils.constants import MSG_FILE_MOVE_ERROR, MSG_FILE_MOVED
 
 logger = logging.getLogger(__name__)
 
-# 書き込み途中のファイルを移動すると失敗するため、検出後に待機する秒数
-FILE_WRITE_WAIT_SECONDS = 1
-# 監視ループが停止を確認する間隔
-POLL_INTERVAL_SECONDS = 1
+StatusCallback = Callable[[str], None]
+
+POLL_INTERVAL_SECONDS = 2.0
+
+FileSignature = tuple[int, float]
 
 
-def move_file(file_path: str, processing_dir: str) -> None:
-    """1ファイルを processing_dir へ移動する。同名ファイルは上書きする"""
-    filename = os.path.basename(file_path)
-    destination = os.path.join(processing_dir, filename)
-
+def _file_signature(path: str) -> FileSignature | None:
+    """ファイルのサイズと更新日時を返す。読めない場合は None"""
     try:
-        if os.path.exists(destination):
-            os.remove(destination)
-        shutil.move(file_path, destination)
-        logger.info(MSG_FILE_MOVED.format(source=file_path, destination=destination))
-    except OSError as e:
-        logger.error(MSG_FILE_MOVE_ERROR.format(filename=filename, error=str(e)))
+        stat_result = os.stat(path)
+    except OSError:
+        return None
+    return stat_result.st_size, stat_result.st_mtime
 
 
-def move_existing_files(target_dir: str, processing_dir: str) -> None:
-    """監視開始前から target_dir にあるファイルを移動する"""
-    for entry in os.scandir(target_dir):
-        if entry.is_file():
-            move_file(entry.path, processing_dir)
+class TargetDirWatcher:
+    """target_dir を一定間隔で走査し、書き込みが完了したPDFを processing_dir へ移動する"""
 
+    def __init__(
+        self,
+        config: AppConfig,
+        status_callback: StatusCallback,
+        poll_interval: float = POLL_INTERVAL_SECONDS,
+    ) -> None:
+        self.config = config
+        self.status_callback = status_callback
+        self.poll_interval = poll_interval
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._signatures: dict[str, FileSignature] = {}
+        self._failed_paths: set[str] = set()
 
-class FileMoveHandler(FileSystemEventHandler):
-    def __init__(self, processing_dir: str) -> None:
-        self.processing_dir = processing_dir
-
-    def on_created(self, event: FileSystemEvent) -> None:
-        if event.is_directory:
+    def start(self) -> None:
+        if self._thread:
             return
 
-        time.sleep(FILE_WRITE_WAIT_SECONDS)
-        move_file(str(event.src_path), self.processing_dir)
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
 
+    def stop(self) -> None:
+        if not self._thread:
+            return
 
-def watch(target_dir: str, processing_dir: str) -> None:
-    observer = Observer()
-    observer.schedule(FileMoveHandler(processing_dir), target_dir, recursive=False)
-    observer.start()
-    logger.info(MSG_WATCH_STARTED.format(directory=target_dir))
+        self._stop_event.set()
+        self._thread.join()
+        self._thread = None
 
-    try:
-        while True:
-            time.sleep(POLL_INTERVAL_SECONDS)
-    except KeyboardInterrupt:
-        observer.stop()
-        logger.info(MSG_WATCH_STOPPED)
-    observer.join()
+    def _run(self) -> None:
+        while not self._stop_event.wait(self.poll_interval):
+            self.scan_once()
 
+    def scan_once(self) -> None:
+        """target_dir を1回走査し、前回と同じ状態のPDFを移動する"""
+        stable_signatures: dict[str, FileSignature] = {}
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+        for entry in self._scan_pdf_entries():
+            signature = _file_signature(entry.path)
+            if signature is None:
+                continue
 
-    config = AppConfig()
-    for directory in config.ensure_directories():
-        logger.info(MSG_DIRECTORY_CREATED.format(directory=directory))
+            # 前回と同じサイズ・更新日時なら書き込みが完了している
+            if self._signatures.get(entry.path) == signature and self._move_file(entry.path):
+                continue
 
-    move_existing_files(config.target_dir, config.processing_dir)
-    watch(config.target_dir, config.processing_dir)
+            stable_signatures[entry.path] = signature
 
+        self._signatures = stable_signatures
 
-if __name__ == "__main__":
-    main()
+    def _scan_pdf_entries(self) -> list[os.DirEntry[str]]:
+        try:
+            return [
+                entry for entry in os.scandir(self.config.target_dir)
+                if entry.is_file() and entry.name.lower().endswith('.pdf')
+            ]
+        except OSError as e:
+            logger.error(MSG_FILE_MOVE_ERROR.format(filename=self.config.target_dir, error=str(e)))
+            return []
+
+    def _move_file(self, file_path: str) -> bool:
+        """1ファイルを processing_dir へ移動する。同名ファイルは上書きする"""
+        filename = os.path.basename(file_path)
+        destination = os.path.join(self.config.processing_dir, filename)
+
+        try:
+            if os.path.exists(destination):
+                os.remove(destination)
+            shutil.move(file_path, destination)
+        except OSError as e:
+            # 移動できない間は走査のたびに再試行するため、ログは最初の1回だけ出す
+            if file_path not in self._failed_paths:
+                self._failed_paths.add(file_path)
+                logger.error(MSG_FILE_MOVE_ERROR.format(filename=filename, error=str(e)))
+            return False
+
+        self._failed_paths.discard(file_path)
+        message = MSG_FILE_MOVED.format(source=file_path, destination=destination)
+        logger.info(message)
+        self.status_callback(message)
+        return True

@@ -37,6 +37,7 @@ def app(app_config: AppConfig, mocker: MockerFixture) -> PDFProcessorApp:
     instance.status_text = mocker.MagicMock()
     instance.observer = None
     instance.is_watching = False
+    instance.target_watcher = mocker.MagicMock()
     return instance
 
 
@@ -54,6 +55,7 @@ def test_init_wires_startup_sequence(
     ttk_module.Frame.return_value.winfo_children.return_value = [mocker.MagicMock()]
     mocker.patch('app.main_window.AppConfig', return_value=app_config)
     observer_class = mocker.patch('app.main_window.Observer')
+    watcher_class = mocker.patch('app.main_window.TargetDirWatcher')
     process = mocker.patch('app.main_window.process_pdf')
     (Path(app_config.processing_dir) / 'existing.pdf').write_bytes(b'pdf')
     master = mocker.MagicMock()
@@ -64,6 +66,7 @@ def test_init_wires_startup_sequence(
     master.geometry.assert_called_once_with('600x500')
     process.assert_called_once()
     observer_class.return_value.start.assert_called_once()
+    watcher_class.return_value.start.assert_called_once()
     assert instance.is_watching is True
     assert master.protocol.call_args.args[0] == 'WM_DELETE_WINDOW'
 
@@ -199,6 +202,7 @@ def app_with_labels(
     mocker: MockerFixture,
     tmp_path: Path,
 ) -> PDFProcessorApp:
+    app.target_dir_label = make_label(mocker, str(tmp_path / 'new_target'))
     app.processing_dir_label = make_label(mocker, str(tmp_path / 'new_processing'))
     app.error_dir_label = make_label(mocker, str(tmp_path / 'new_error'))
     app.done_dir_label = make_label(mocker, str(tmp_path / 'new_done'))
@@ -220,6 +224,7 @@ def test_save_config_persists_label_values(
     app_with_labels.save_config()
 
     reloaded = AppConfig(config_file)
+    assert reloaded.target_dir == str(tmp_path / 'new_target')
     assert reloaded.processing_dir == str(tmp_path / 'new_processing')
     assert reloaded.error_dir == str(tmp_path / 'new_error')
     assert reloaded.done_dir == str(tmp_path / 'new_done')
@@ -264,6 +269,7 @@ def test_quit_app_stops_watching_and_quits(app: PDFProcessorApp, mocker: MockerF
 
     app.quit_app()
 
+    as_mock(app.target_watcher).stop.assert_called_once()
     observer.stop.assert_called_once()
     as_mock(app.master).quit.assert_called_once()
 

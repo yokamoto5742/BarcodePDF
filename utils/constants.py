@@ -2,6 +2,7 @@
 
 APP_TITLE = "BarcodePDF"
 
+LABEL_TARGET_DIR = "取込フォルダ:"
 LABEL_PROCESSING_DIR = "処理フォルダ:"
 LABEL_ERROR_DIR = "エラーフォルダ:"
 LABEL_DONE_DIR = "完了フォルダ:"

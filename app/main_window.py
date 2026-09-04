@@ -10,6 +10,7 @@ from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
 
 from app import __version__
+from service.file_move import TargetDirWatcher
 from service.pdf_processor import PDFHandler, process_pdf
 from utils.config_manager import AppConfig
 from utils.constants import (
@@ -27,6 +28,7 @@ from utils.constants import (
     LABEL_LOG_DIR,
     LABEL_PROCESSING_DIR,
     LABEL_STATUS,
+    LABEL_TARGET_DIR,
     MSG_APP_QUIT,
     MSG_CONFIG_UPDATED,
     MSG_DIRECTORY_CREATED,
@@ -50,10 +52,12 @@ class PDFProcessorApp:
         self.create_widgets()
         self.observer: BaseObserver | None = None
         self.is_watching = False
+        self.target_watcher = TargetDirWatcher(self.config, self.update_status)
 
         self.ensure_directories()
         self.process_existing_pdfs()
         self.start_watching()
+        self.target_watcher.start()
 
         self.master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -63,35 +67,36 @@ class PDFProcessorApp:
         self.master.columnconfigure(0, weight=1)
         self.master.rowconfigure(0, weight=1)
 
-        self.processing_dir_label = self._create_directory_row(LABEL_PROCESSING_DIR, self.config.processing_dir, 0)
-        self.error_dir_label = self._create_directory_row(LABEL_ERROR_DIR, self.config.error_dir, 1)
-        self.done_dir_label = self._create_directory_row(LABEL_DONE_DIR, self.config.done_dir, 2)
-        self.log_dir_label = self._create_directory_row(LABEL_LOG_DIR, self.config.log_dir, 3)
+        self.target_dir_label = self._create_directory_row(LABEL_TARGET_DIR, self.config.target_dir, 0)
+        self.processing_dir_label = self._create_directory_row(LABEL_PROCESSING_DIR, self.config.processing_dir, 1)
+        self.error_dir_label = self._create_directory_row(LABEL_ERROR_DIR, self.config.error_dir, 2)
+        self.done_dir_label = self._create_directory_row(LABEL_DONE_DIR, self.config.done_dir, 3)
+        self.log_dir_label = self._create_directory_row(LABEL_LOG_DIR, self.config.log_dir, 4)
 
         self.auto_open_var = tk.BooleanVar(value=self.config.auto_open_error_folder)
         ttk.Checkbutton(
             self.frame,
             text=CHECKBOX_AUTO_OPEN_ERROR_FOLDER,
             variable=self.auto_open_var,
-        ).grid(column=0, row=4, columnspan=2, sticky=tk.W)
+        ).grid(column=0, row=5, columnspan=2, sticky=tk.W)
 
-        ttk.Button(self.frame, text=BUTTON_SAVE_CONFIG, command=self.save_config).grid(column=2, row=4, sticky=tk.E)
-        ttk.Button(self.frame, text=BUTTON_CLOSE, command=self.quit_app).grid(column=2, row=5, sticky=tk.E)
+        ttk.Button(self.frame, text=BUTTON_SAVE_CONFIG, command=self.save_config).grid(column=2, row=5, sticky=tk.E)
+        ttk.Button(self.frame, text=BUTTON_CLOSE, command=self.quit_app).grid(column=2, row=6, sticky=tk.E)
 
-        ttk.Label(self.frame, text=LABEL_STATUS).grid(column=0, row=6, sticky=tk.W)
+        ttk.Label(self.frame, text=LABEL_STATUS).grid(column=0, row=7, sticky=tk.W)
 
         self.status_text = tk.Text(self.frame, height=10, width=70, wrap=tk.WORD)
-        self.status_text.grid(column=0, row=7, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.status_text.grid(column=0, row=8, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.status_text.config(state=tk.DISABLED)
 
         scrollbar = ttk.Scrollbar(self.frame, orient=tk.VERTICAL, command=self.status_text.yview)
-        scrollbar.grid(column=3, row=7, sticky=(tk.N, tk.S))
+        scrollbar.grid(column=3, row=8, sticky=(tk.N, tk.S))
         self.status_text['yscrollcommand'] = scrollbar.set
 
         for child in self.frame.winfo_children():
             cast(tk.Widget, child).grid_configure(padx=5, pady=5)
         self.frame.columnconfigure(1, weight=1)
-        self.frame.rowconfigure(7, weight=1)
+        self.frame.rowconfigure(8, weight=1)
 
     def _create_directory_row(self, label_text: str, directory: str, row: int) -> ttk.Label:
         ttk.Label(self.frame, text=label_text).grid(column=0, row=row, sticky=tk.W)
@@ -109,6 +114,7 @@ class PDFProcessorApp:
             target_label.config(text=directory)
 
     def save_config(self) -> None:
+        self.config.target_dir = str(self.target_dir_label['text'])
         self.config.processing_dir = str(self.processing_dir_label['text'])
         self.config.error_dir = str(self.error_dir_label['text'])
         self.config.done_dir = str(self.done_dir_label['text'])
@@ -171,6 +177,7 @@ class PDFProcessorApp:
         self.status_text.config(state=tk.DISABLED)
 
     def quit_app(self) -> None:
+        self.target_watcher.stop()
         self.stop_watching()
         logger.info(MSG_APP_QUIT)
         self.master.quit()
