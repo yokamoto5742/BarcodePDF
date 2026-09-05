@@ -11,6 +11,7 @@ BarcodePDFは、PDFファイルからバーコードを自動的に読み取り�
 - **フォルダ監視**: 指定フォルダを監視し、新しいファイルを自動処理
 - **GUI設定画面**: 直感的な設定インターフェース
 - **エラー処理**: バーコードが検出できないファイルを別フォルダに移動
+- **エラーPDF自動削除**: エラーフォルダに溜まったPDFを保持期間に応じて自動削除
 - **ログ機能**: 処理履歴とエラーログの自動記録
 - **設定の永続化**: 設定内容をconfig.iniファイルに保存
 
@@ -68,6 +69,11 @@ uv run python main.py
 
 ### 3. PDF処理の流れ
 
+**アプリ起動時**:
+- エラーフォルダの保持期間を超過したPDFを自動削除（`log_retention_days`設定値を使用）
+- GUIウィンドウを表示し、フォルダ監視を開始
+
+**常駐動作中**:
 1. スキャナーがPDFファイルを**取込フォルダ**に出力
 2. アプリが2秒ごとに取込フォルダを走査し、書き込みが完了したPDFにバーコード読み取り処理を実行
 3. 成功時：バーコード内容でファイル名を変更し**完了フォルダ**に移動
@@ -121,12 +127,12 @@ project_name = BarcodePDF
 - `done_dir`: 処理済みファイルの保存先
 - `width`/`height`: アプリウィンドウのサイズ
 - `contrast_factor`: 読み取り前にかけるコントラスト強調の倍率
-- `render_zoom`: PDFページの描画拡大率（72dpi基準）
+- `render_zoom`: PDFページの描画拡大率）
 - `top_band_ratio`: ページ上端からバーコードを探す高さの割合
 - `min_barcode_width_ratio`: 採用するバーコードの、ページ幅に対する最小幅
 - `auto_open_error_folder`: エラー時のフォルダ自動表示
 - `log_directory`: ログファイルの保存先
-- `log_retention_days`: ログファイルの保持日数
+- `log_retention_days`: ログファイルおよびエラーフォルダのPDFの保持日数（アプリ起動時に超過ファイルを削除）
 - `log_level`: ログ出力レベル（DEBUG/INFO/WARNING/ERROR）
 
 ## ログ機能
@@ -191,7 +197,7 @@ findstr TRACE C:\Shinseikai\BarcodePDF\log\BarcodePDF.log
 ### アーキテクチャ
 
 ```
-main.py                       : エントリポイント
+main.py                       : エントリポイント（起動時のクリーンアップ → GUI起動）
 ├── app/
 │   ├── __init__.py           : __version__（GUIのバージョン表示元）
 │   └── main_window.py        : PDFProcessorApp（GUIとフォルダ監視の起動）
@@ -199,10 +205,12 @@ main.py                       : エントリポイント
 │   ├── barcode_reader.py     : PDFの上部帯をレンダリングしてCODE128読み取り
 │   │                           (高解像度・ノイズ除去・最大幅優先)
 │   ├── pdf_processor.py      : process_pdf（振り分けとトレースログ）
-│   └── pdf_watcher.py        : PdfWatcher（取込フォルダのポーリング監視）
+│   ├── pdf_watcher.py        : PdfWatcher（取込フォルダのポーリング監視）
+│   └── error_pdf_cleanup.py  : cleanup_error_pdfs（エラーフォルダの古いPDF削除）
 └── utils/
     ├── config_manager.py     : ConfigManager / AppConfig（config.ini の読み書き）
     ├── log_rotation.py       : setup_logging（日次ローテーションと古いログの削除）
+    ├── file_cleanup.py       : delete_files_older_than（保持期間超過ファイルの削除）
     └── constants.py          : UI・ログメッセージの定数
 ```
 
@@ -219,7 +227,7 @@ main.py                       : エントリポイント
 
 ```python
 CONTRAST_FACTOR = 2.0           # コントラスト強調の度合い（高いほど細いバーが強調される）
-RENDER_ZOOM = 3.0               # PDFレンダリング時の拡大率（72dpi基準）
+RENDER_ZOOM = 3.0               # PDFレンダリング時の拡大率
 TOP_BAND_RATIO = 0.15           # ページ上端から探索する高さの割合（15%）
 MIN_BARCODE_WIDTH_RATIO = 0.20  # 採用するバーコードの最小幅（ページ幅の20%以上）
 ```
