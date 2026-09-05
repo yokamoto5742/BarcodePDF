@@ -9,26 +9,13 @@ from PIL import Image, ImageEnhance
 from pyzbar.pyzbar import Decoded, decode
 from pyzbar.wrapper import ZBarSymbol
 
-from utils.config_manager import load_config
+from utils.config_manager import AppConfig
 from utils.constants import MSG_BARCODE_READ_ERROR
 
 logger = logging.getLogger(__name__)
 
-_config = load_config()
 
-CONTRAST_FACTOR = _config.getfloat('Barcode', 'contrast_factor', fallback=2.0)
-
-# 72dpi基準の拡大率。等倍ではバーの太さが足りずデコードできない（既定は150dpi相当）
-RENDER_ZOOM = _config.getfloat('Barcode', 'render_zoom', fallback=2.0)
-
-# ページ上端から探索する高さの割合。これより下の小さなバーコードやQRは画像に含めない
-TOP_BAND_RATIO = _config.getfloat('Barcode', 'top_band_ratio', fallback=0.15)
-
-# ページ幅に対する最小幅。帯の中に小さなバーコードが並んでいても大きい方だけを採用する
-MIN_BARCODE_WIDTH_RATIO = _config.getfloat('Barcode', 'min_barcode_width_ratio', fallback=0.20)
-
-
-def _render_top_band(pdf_path: str) -> np.ndarray | None:
+def _render_top_band(pdf_path: str, config: AppConfig) -> np.ndarray | None:
     """1ページ目の上部だけを高解像度でレンダリングしてグレースケール配列にする"""
     # 破損PDFで例外が起きてもファイルハンドルを解放するためwith文を使う
     with pymupdf.open(pdf_path) as pdf_document:
@@ -37,11 +24,14 @@ def _render_top_band(pdf_path: str) -> np.ndarray | None:
 
         page = pdf_document[0]
         rect = page.rect
-        clip = pymupdf.Rect(rect.x0, rect.y0, rect.x1, rect.y0 + rect.height * TOP_BAND_RATIO)
-        pix = page.get_pixmap(matrix=pymupdf.Matrix(RENDER_ZOOM, RENDER_ZOOM), clip=clip)
+        clip = pymupdf.Rect(
+            rect.x0, rect.y0, rect.x1, rect.y0 + rect.height * config.top_band_ratio
+        )
+        matrix = pymupdf.Matrix(config.render_zoom, config.render_zoom)
+        pix = page.get_pixmap(matrix=matrix, clip=clip)
         image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
-    gray_image = ImageEnhance.Contrast(image.convert('L')).enhance(CONTRAST_FACTOR)
+    gray_image = ImageEnhance.Contrast(image.convert('L')).enhance(config.contrast_factor)
     return np.array(gray_image)
 
 
@@ -56,9 +46,13 @@ def _decode_code128(gray: np.ndarray) -> list[Decoded]:
     return barcodes
 
 
-def _select_widest_barcode(barcodes: list[Decoded], image_width: int) -> str | None:
+def _select_widest_barcode(
+    barcodes: list[Decoded],
+    image_width: int,
+    min_width_ratio: float,
+) -> str | None:
     """幅がページ幅の一定割合以上のもののうち最も広いものを採用する"""
-    min_width = image_width * MIN_BARCODE_WIDTH_RATIO
+    min_width = image_width * min_width_ratio
     wide_barcodes = [barcode for barcode in barcodes if barcode.rect.width >= min_width]
 
     if not wide_barcodes:
@@ -67,13 +61,15 @@ def _select_widest_barcode(barcodes: list[Decoded], image_width: int) -> str | N
     return max(wide_barcodes, key=lambda barcode: barcode.rect.width).data.decode('utf-8')
 
 
-def read_barcode_from_pdf(pdf_path: str) -> str | None:
-    gray = _render_top_band(pdf_path)
+def read_barcode_from_pdf(pdf_path: str, config: AppConfig) -> str | None:
+    gray = _render_top_band(pdf_path, config)
     if gray is None:
         return None
 
     try:
-        return _select_widest_barcode(_decode_code128(gray), gray.shape[1])
+        return _select_widest_barcode(
+            _decode_code128(gray), gray.shape[1], config.min_barcode_width_ratio
+        )
     except Exception as e:
         logger.warning(MSG_BARCODE_READ_ERROR.format(error=str(e)))
         return None

@@ -26,6 +26,17 @@ MSG_APP_QUIT = "アプリケーションを終了します"
 
 MSG_SCAN_ERROR = "{directory} の走査中にエラーが発生しました: {error}"
 
+LABEL_LOG_FILE = "ログファイル"
+LABEL_ERROR_PDF = "エラーPDF"
+MSG_DELETE_FILE = "古い{label}を削除しました: {filename}"
+MSG_DELETE_FAILED = "{label}の削除中にエラーが発生しました {filename}: {error}"
+MSG_DELETE_SUMMARY = "合計 {count} 個の古い{label}を削除しました"
+
+MSG_LOG_INITIALIZED = "ログシステムが初期化されました: {path}"
+MSG_LOG_LEVEL_INVALID = "無効なログレベル '{level}' が指定されました。INFOを使用します。"
+MSG_LOG_DIR_PERMISSION_ERROR = "ログディレクトリの作成権限がありません: {error}"
+MSG_LOG_SETUP_ERROR = "ログ設定の初期化中にエラーが発生しました: {error}"
+
 MSG_PROCESSING_START = "PDFの処理を開始: {path}"
 MSG_FILE_NOT_FOUND = "ファイルが見つかりません: {path}"
 MSG_PROCESS_DONE = "処理完了: {source} -> {destination}"

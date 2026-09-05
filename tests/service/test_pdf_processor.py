@@ -68,6 +68,8 @@ def test_is_valid_barcode_accepts_usable_names(barcode: str) -> None:
     'nul',
     'COM1',
     'LPT9',
+    'CON.foo',
+    'com1.txt',
     'a' * (MAX_BARCODE_LENGTH + 1),
 ])
 def test_is_valid_barcode_rejects_unsafe_names(barcode: str) -> None:

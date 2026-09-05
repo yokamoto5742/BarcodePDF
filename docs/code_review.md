@@ -1,6 +1,6 @@
 # コードレビュー: BarcodePDF
 
-対象: `main.py` / `build.py` / `app/` / `service/` / `utils/`（計 904 行）
+対象: `../main.py` / `../build.py` / `../app` / `../service` / `../utils`（計 904 行）
 観点: **可読性・メンテナンス性の向上**、**KISS の原則**
 前提: レビュー時点で `pytest tests/ -q` は **168 passed**（全緑）
 
@@ -10,7 +10,7 @@
 
 責務分割（`app` = GUI / `service` = 処理 / `utils` = 基盤）は明快で、`constants.py` によるメッセージ一元化、`PdfWatcher` の「サイズ+更新日時が安定してから処理する」設計、`update_status` のキュー経由でのスレッド安全化など、要点は正しく押さえられています。コメントも「なぜそうしたか」を書けており良質です。
 
-一方で **`utils/` 層に不要な複雑さが集中** しています。特に `get_config_value` が `object` を返す設計が `log_rotation.py` 全体にボイラープレートと `# type: ignore` を撒いており、ここが本コードベース最大の可読性負債です。また `service/` には再起動不能や無限リトライといった、レビューで見つけるべきクラスの不具合が 2 件あります。
+一方で **`../utils` 層に不要な複雑さが集中** しています。特に `get_config_value` が `object` を返す設計が `log_rotation.py` 全体にボイラープレートと `# type: ignore` を撒いており、ここが本コードベース最大の可読性負債です。また `../service` には再起動不能や無限リトライといった、レビューで見つけるべきクラスの不具合が 2 件あります。
 
 修正の投資対効果は以下の順です。
 
@@ -112,7 +112,7 @@ scan4: 再び process_pdf …（4 秒周期で永久に繰り返す）
 
 ## P1-3. `get_config_value` を廃止し、configparser の型付きアクセサに寄せる
 
-`utils/config_manager.py:93-107` と `utils/log_rotation.py` 全体
+`utils/config_manager.py:93-107` と `../utils/log_rotation.py` 全体
 
 `get_config_value` は戻り値が `object` のため、呼び出し側が必ず `str(...)` / `int(...)` でキャストし直す必要があります。その結果 `setup_logging` の冒頭は「値を取る 4 行」と「None ガードしてキャストする 4 行」に分裂し、`# type: ignore` が 2 箇所（`log_rotation.py:22`, `:193`）発生しています。
 
@@ -171,7 +171,7 @@ def _resolve_log_directory(config: configparser.ConfigParser) -> str:
 
 `utils/log_rotation.py:79-104`（`cleanup_old_logs`）と `:107-138`（`cleanup_error_pdfs`）
 
-両者は「対象ファイルを絞り込む条件」だけが違い、残りの **走査 → 更新日時取得 → 保持期間比較 → 削除 → 件数ログ → 例外握り潰し** が完全に同型です。`.claude/rules/python-coding.md` の「類似のロジックが 2 箇所に存在する場合は共有関数にリファクタリングする」に正面から抵触します。
+両者は「対象ファイルを絞り込む条件」だけが違い、残りの **走査 → 更新日時取得 → 保持期間比較 → 削除 → 件数ログ → 例外握り潰し** が完全に同型です。`../.claude/rules/python-coding.md` の「類似のロジックが 2 箇所に存在する場合は共有関数にリファクタリングする」に正面から抵触します。
 
 ```python
 def _delete_files_older_than(
@@ -219,7 +219,7 @@ def cleanup_error_pdfs(config: configparser.ConfigParser, retention_days: int) -
     )
 ```
 
-**併せて指摘: 責務の置き場所が違います。** `cleanup_error_pdfs` は PDF の後始末であってログ機能ではありません。現在は「ログ設定の初期化ついでに実行される」ため、`log_rotation.setup_logging` を呼ぶと副作用で業務データ（エラー PDF）が消えます。`setup_logging` の呼び出し箇所（`main.py:8`, `app/main_window.py:118`）を読んだだけでは PDF が削除されることに気づけません。`service/` 側へ移し、`main.py` から明示的に呼ぶ形が読み手に親切です。
+**併せて指摘: 責務の置き場所が違います。** `cleanup_error_pdfs` は PDF の後始末であってログ機能ではありません。現在は「ログ設定の初期化ついでに実行される」ため、`log_rotation.setup_logging` を呼ぶと副作用で業務データ（エラー PDF）が消えます。`setup_logging` の呼び出し箇所（`main.py:8`, `app/main_window.py:118`）を読んだだけでは PDF が削除されることに気づけません。`../service` 側へ移し、`../main.py` から明示的に呼ぶ形が読み手に親切です。
 
 ---
 
@@ -336,7 +336,7 @@ def _move_overwriting(source: str, destination: str) -> None:
 
 ## P2-8. `except Exception` で握り潰し・再送出している箇所
 
-`utils/log_rotation.py:75-76` の `except Exception as e: raise Exception(f"...: {e}")` は、**元の例外型とトレースバックを捨てて** 汎用 `Exception` に変換しています。呼び出し側（`main.py`）は型で判別できず、原因究明も難しくなります。`raise` を素通しにするか、少なくとも `from e` を付けてください。直上の `PermissionError` 再送出（`:73-74`）も同様に `from e` が必要です。
+`utils/log_rotation.py:75-76` の `except Exception as e: raise Exception(f"...: {e}")` は、**元の例外型とトレースバックを捨てて** 汎用 `Exception` に変換しています。呼び出し側（`../main.py`）は型で判別できず、原因究明も難しくなります。`raise` を素通しにするか、少なくとも `from e` を付けてください。直上の `PermissionError` 再送出（`:73-74`）も同様に `from e` が必要です。
 
 `cleanup_old_logs` / `cleanup_error_pdfs` / `setup_debug_logging` / `get_log_info` の広い `except Exception` も、想定される失敗（`OSError`）は内側で個別に捕捉済みです。外側の網は「あり得ないシナリオに対するエラーハンドリング」に当たり、不具合を静かに隠します。
 
@@ -365,10 +365,10 @@ Windows のデバイス名予約は拡張子の有無に関わらず適用され
 
 ## P2-11. 規約準拠の細かい点
 
-- **`utils/config_manager.py`**: トップレベル定義の前後が 1 行空行になっています（`:6-7`, `:14-15`, `:16-17`）。PEP8 は 2 行を要求します。
+- **`../utils/config_manager.py`**: トップレベル定義の前後が 1 行空行になっています（`:6-7`, `:14-15`, `:16-17`）。PEP8 は 2 行を要求します。
 - **`build.py:14`**: `print(f"Executable built successfully.")` — プレースホルダが無く `f` が不要です。また `build_executable()` に戻り値型ヒントがなく（規約は型ヒント必須）、`subprocess.run` の `returncode` を確認していないため、**PyInstaller が失敗しても「成功しました」と表示されます**。`check=True` を付けてください。
 - **`app/main_window.py:118`**: `setup_logging(self.config.config)` の `config.config` という二重表記は、`AppConfig` が内部の `ConfigParser` を公開していることの表れです。`AppConfig.setup_logging()` のようなメソッドを生やすか、`log_rotation` 側が `AppConfig` を受け取る形にすると呼び出しが読みやすくなります。
-- **`utils/log_rotation.py`**: ログメッセージが f-string 直書きで、`constants.py` の一元管理方針から外れています。UI 表示メッセージではないため規約の直接の対象外とも読めますが、他モジュールとの一貫性の観点で整理を検討してください。
+- **`../utils/log_rotation.py`**: ログメッセージが f-string 直書きで、`constants.py` の一元管理方針から外れています。UI 表示メッセージではないため規約の直接の対象外とも読めますが、他モジュールとの一貫性の観点で整理を検討してください。
 
 ---
 

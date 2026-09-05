@@ -196,6 +196,23 @@ def test_save_config_reinitializes_logging_and_notifies(
     messagebox.showinfo.assert_called_once()
 
 
+def test_save_config_rebinds_watcher_to_new_target_dir(
+    app_with_labels: PDFProcessorApp,
+    mocker: MockerFixture,
+    tmp_path: Path,
+) -> None:
+    """取込フォルダを変更したら監視を貼り直す"""
+    mocker.patch('app.main_window.messagebox')
+    mocker.patch('app.main_window.setup_logging')
+
+    app_with_labels.save_config()
+
+    watcher = as_mock(app_with_labels.watcher)
+    watcher.stop.assert_called_once()
+    watcher.start.assert_called_once()
+    assert app_with_labels.config.target_dir == str(tmp_path / 'new_target')
+
+
 # --- 終了処理（P2） ---
 
 

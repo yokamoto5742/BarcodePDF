@@ -118,16 +118,52 @@ def test_uppercase_extension_is_processed(
     assert processed_paths(process_pdf) == [str(source)]
 
 
-def test_file_left_behind_is_retried_after_stabilizing(
+def test_file_left_behind_is_not_reprocessed(
     watcher: PdfWatcher,
     app_config: AppConfig,
     process_pdf: MagicMock,
 ) -> None:
-    """処理できずに残ったファイルは、次に安定した時点で再試行する"""
+    """移動に失敗して残ったファイルは、内容が変わらない限り再処理しない"""
+    source = write_pdf(app_config.target_dir, 'locked.pdf')
+
+    for _ in range(4):
+        watcher.scan_once()
+
+    assert processed_paths(process_pdf) == [str(source)]
+
+
+def test_file_left_behind_is_reprocessed_after_content_changes(
+    watcher: PdfWatcher,
+    app_config: AppConfig,
+    process_pdf: MagicMock,
+) -> None:
+    """同名で再投入された（署名が変わった）ファイルは処理対象に戻す"""
     source = write_pdf(app_config.target_dir, 'locked.pdf')
 
     watcher.scan_once()
     watcher.scan_once()
+
+    source.write_bytes(b'%PDF-1.7 dummy resent')
+    watcher.scan_once()
+    watcher.scan_once()
+
+    assert processed_paths(process_pdf) == [str(source), str(source)]
+
+
+def test_reappearing_file_is_processed_again(
+    watcher: PdfWatcher,
+    app_config: AppConfig,
+    process_pdf: MagicMock,
+) -> None:
+    """処理後に消えたファイルは、同名で置き直されたら再び処理する"""
+    source = write_pdf(app_config.target_dir, 'scan.pdf')
+
+    watcher.scan_once()
+    watcher.scan_once()
+    source.unlink()
+    watcher.scan_once()
+
+    write_pdf(app_config.target_dir, 'scan.pdf')
     watcher.scan_once()
     watcher.scan_once()
 
@@ -198,3 +234,22 @@ def test_stop_without_start_does_nothing(watcher: PdfWatcher) -> None:
     watcher.stop()
 
     assert watcher._thread is None
+
+
+def test_restart_resumes_scanning(watcher: PdfWatcher, mocker: MockerFixture) -> None:
+    """stop 後に start し直しても走査を続ける（設定保存で監視を貼り直せる）"""
+    watcher.poll_interval = 0.01
+    scanned = threading.Event()
+    mocker.patch.object(watcher, 'scan_once', side_effect=lambda: scanned.set())
+
+    watcher.start()
+    assert scanned.wait(timeout=5)
+    watcher.stop()
+
+    scanned.clear()
+    watcher.start()
+    thread = watcher._thread
+    assert thread is not None and thread.is_alive()
+    assert scanned.wait(timeout=5)
+
+    watcher.stop()

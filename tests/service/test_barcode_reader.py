@@ -13,25 +13,24 @@ import pytest
 from pytest_mock import MockerFixture
 
 from service.barcode_reader import (
-    MIN_BARCODE_WIDTH_RATIO,
-    RENDER_ZOOM,
-    TOP_BAND_RATIO,
     _decode_code128,
     _render_top_band,
     _select_widest_barcode,
     read_barcode_from_pdf,
 )
+from utils.config_manager import AppConfig
 
 PAGE_SIZE = 200
+MIN_WIDTH_RATIO = 0.20
 
 
-def make_pdf(path: Path, pages: int = 1) -> str:
+def make_pdf(path: Path, top_band_ratio: float, pages: int = 1) -> str:
     """上部の帯の左半分だけを灰色（153）で塗ったPDFを生成する"""
     document = pymupdf.open()
 
     for _ in range(pages):
         page = document.new_page(width=PAGE_SIZE, height=PAGE_SIZE)
-        band_height = PAGE_SIZE * TOP_BAND_RATIO
+        band_height = PAGE_SIZE * top_band_ratio
         page.draw_rect(pymupdf.Rect(0, 0, PAGE_SIZE / 2, band_height), fill=(0.6, 0.6, 0.6))
 
     document.save(str(path))
@@ -46,27 +45,39 @@ def fake_barcode(data: bytes, width: int) -> SimpleNamespace:
 # --- _render_top_band（P1） ---
 
 
-def test_render_top_band_crops_to_top_ratio(tmp_path: Path) -> None:
-    gray = _render_top_band(make_pdf(tmp_path / 'one.pdf'))
+def test_render_top_band_crops_to_top_ratio(tmp_path: Path, app_config: AppConfig) -> None:
+    gray = _render_top_band(make_pdf(tmp_path / 'one.pdf', app_config.top_band_ratio), app_config)
 
     assert gray is not None
-    # 高さのみTOP_BAND_RATIOで切り取り、幅はページ全体をRENDER_ZOOM倍で描画する
+    # 高さのみtop_band_ratioで切り取り、幅はページ全体をrender_zoom倍で描画する
     # 拡大率が整数倍とは限らないため、ピクセル数の丸め差は許容する
+    zoom = app_config.render_zoom
     assert gray.shape == pytest.approx(
-        (PAGE_SIZE * TOP_BAND_RATIO * RENDER_ZOOM, PAGE_SIZE * RENDER_ZOOM), abs=1
+        (PAGE_SIZE * app_config.top_band_ratio * zoom, PAGE_SIZE * zoom), abs=1
     )
 
 
-def test_render_top_band_returns_grayscale_array(tmp_path: Path) -> None:
-    gray = _render_top_band(make_pdf(tmp_path / 'one.pdf'))
+def test_render_top_band_honors_configured_zoom(tmp_path: Path, app_config: AppConfig) -> None:
+    """拡大率はimport時の定数ではなく、渡された設定から読む"""
+    pdf = make_pdf(tmp_path / 'one.pdf', app_config.top_band_ratio)
+    app_config.render_zoom = 4.0
+
+    gray = _render_top_band(pdf, app_config)
+
+    assert gray is not None
+    assert gray.shape[1] == pytest.approx(PAGE_SIZE * 4.0, abs=1)
+
+
+def test_render_top_band_returns_grayscale_array(tmp_path: Path, app_config: AppConfig) -> None:
+    gray = _render_top_band(make_pdf(tmp_path / 'one.pdf', app_config.top_band_ratio), app_config)
 
     assert gray is not None
     assert gray.ndim == 2
     assert gray.dtype == np.uint8
 
 
-def test_render_top_band_enhances_contrast(tmp_path: Path) -> None:
-    gray = _render_top_band(make_pdf(tmp_path / 'one.pdf'))
+def test_render_top_band_enhances_contrast(tmp_path: Path, app_config: AppConfig) -> None:
+    gray = _render_top_band(make_pdf(tmp_path / 'one.pdf', app_config.top_band_ratio), app_config)
 
     assert gray is not None
     middle_row = gray[gray.shape[0] // 2]
@@ -75,30 +86,40 @@ def test_render_top_band_enhances_contrast(tmp_path: Path) -> None:
     assert middle_row[-10] == 255
 
 
-def test_render_top_band_reads_only_first_page(tmp_path: Path, mocker: MockerFixture) -> None:
-    pages = pymupdf.open(make_pdf(tmp_path / 'multi.pdf', pages=3))
+def test_render_top_band_reads_only_first_page(
+    tmp_path: Path,
+    app_config: AppConfig,
+    mocker: MockerFixture,
+) -> None:
+    pages = pymupdf.open(make_pdf(tmp_path / 'multi.pdf', app_config.top_band_ratio, pages=3))
     document = mocker.MagicMock()
     document.__enter__.return_value = document
     document.page_count = 3
     document.__getitem__.side_effect = lambda index: pages[index]
     mocker.patch('service.barcode_reader.pymupdf.open', return_value=document)
 
-    _render_top_band('any.pdf')
+    _render_top_band('any.pdf', app_config)
 
     document.__getitem__.assert_called_once_with(0)
 
 
-def test_render_top_band_returns_none_for_empty_pdf(mocker: MockerFixture) -> None:
+def test_render_top_band_returns_none_for_empty_pdf(
+    app_config: AppConfig,
+    mocker: MockerFixture,
+) -> None:
     document = mocker.MagicMock()
     document.__enter__.return_value = document
     document.page_count = 0
     mocker.patch('service.barcode_reader.pymupdf.open', return_value=document)
 
-    assert _render_top_band('empty.pdf') is None
+    assert _render_top_band('empty.pdf', app_config) is None
     document.__getitem__.assert_not_called()
 
 
-def test_render_top_band_releases_handle_on_error(mocker: MockerFixture) -> None:
+def test_render_top_band_releases_handle_on_error(
+    app_config: AppConfig,
+    mocker: MockerFixture,
+) -> None:
     """破損PDFで例外が起きてもファイルハンドルを解放する"""
     document = mocker.MagicMock()
     document.__enter__.return_value = document
@@ -106,14 +127,14 @@ def test_render_top_band_releases_handle_on_error(mocker: MockerFixture) -> None
     mocker.patch('service.barcode_reader.pymupdf.open', return_value=document)
 
     with pytest.raises(RuntimeError):
-        _render_top_band('broken.pdf')
+        _render_top_band('broken.pdf', app_config)
 
     document.__exit__.assert_called_once()
 
 
-def test_render_top_band_raises_for_missing_file(tmp_path: Path) -> None:
+def test_render_top_band_raises_for_missing_file(tmp_path: Path, app_config: AppConfig) -> None:
     with pytest.raises(Exception):
-        _render_top_band(str(tmp_path / 'missing.pdf'))
+        _render_top_band(str(tmp_path / 'missing.pdf'), app_config)
 
 
 # --- _decode_code128（P0） ---
@@ -172,36 +193,36 @@ def test_select_returns_widest_barcode() -> None:
         fake_barcode(b'MIDDLE', 400),
     ]
 
-    assert _select_widest_barcode(barcodes, 1000) == 'WIDEST'
+    assert _select_widest_barcode(barcodes, 1000, MIN_WIDTH_RATIO) == 'WIDEST'
 
 
 def test_select_ignores_barcodes_below_minimum_width() -> None:
     """帯の中に紛れた小さなバーコードは幅で除外する"""
-    minimum = 1000 * MIN_BARCODE_WIDTH_RATIO
+    minimum = 1000 * MIN_WIDTH_RATIO
     barcodes = [fake_barcode(b'SMALL', int(minimum) - 1), fake_barcode(b'LARGE', int(minimum))]
 
-    assert _select_widest_barcode(barcodes, 1000) == 'LARGE'
+    assert _select_widest_barcode(barcodes, 1000, MIN_WIDTH_RATIO) == 'LARGE'
 
 
 def test_select_returns_none_when_all_barcodes_are_small() -> None:
     barcodes = [fake_barcode(b'SMALL', 10), fake_barcode(b'TINY', 5)]
 
-    assert _select_widest_barcode(barcodes, 1000) is None
+    assert _select_widest_barcode(barcodes, 1000, MIN_WIDTH_RATIO) is None
 
 
 def test_select_returns_none_for_empty_list() -> None:
-    assert _select_widest_barcode([], 1000) is None
+    assert _select_widest_barcode([], 1000, MIN_WIDTH_RATIO) is None
 
 
 def test_select_keeps_first_barcode_when_widths_tie() -> None:
     barcodes = [fake_barcode(b'FIRST', 500), fake_barcode(b'SECOND', 500)]
 
-    assert _select_widest_barcode(barcodes, 1000) == 'FIRST'
+    assert _select_widest_barcode(barcodes, 1000, MIN_WIDTH_RATIO) == 'FIRST'
 
 
 def test_select_raises_for_non_utf8_payload() -> None:
     with pytest.raises(UnicodeDecodeError):
-        _select_widest_barcode([fake_barcode(b'\xff\xfe', 500)], 1000)
+        _select_widest_barcode([fake_barcode(b'\xff\xfe', 500)], 1000, MIN_WIDTH_RATIO)
 
 
 # --- read_barcode_from_pdf（P0） ---
@@ -217,6 +238,7 @@ def rendered_band(mocker: MockerFixture) -> None:
 
 def test_read_barcode_returns_widest_barcode_in_top_band(
     rendered_band: None,
+    app_config: AppConfig,
     mocker: MockerFixture,
 ) -> None:
     mocker.patch('service.barcode_reader._decode_code128', return_value=[
@@ -224,28 +246,50 @@ def test_read_barcode_returns_widest_barcode_in_top_band(
         fake_barcode(b'LARGE', 500),
     ])
 
-    assert read_barcode_from_pdf('any.pdf') == 'LARGE'
+    assert read_barcode_from_pdf('any.pdf', app_config) == 'LARGE'
+
+
+def test_read_barcode_honors_configured_minimum_width(
+    rendered_band: None,
+    app_config: AppConfig,
+    mocker: MockerFixture,
+) -> None:
+    """最小幅の割合も設定から読むため、テストから切り替えられる"""
+    mocker.patch(
+        'service.barcode_reader._decode_code128', return_value=[fake_barcode(b'NARROW', 100)]
+    )
+
+    app_config.min_barcode_width_ratio = 0.5
+    assert read_barcode_from_pdf('any.pdf', app_config) is None
+
+    app_config.min_barcode_width_ratio = 0.05
+    assert read_barcode_from_pdf('any.pdf', app_config) == 'NARROW'
 
 
 def test_read_barcode_returns_none_when_nothing_found(
     rendered_band: None,
+    app_config: AppConfig,
     mocker: MockerFixture,
 ) -> None:
     mocker.patch('service.barcode_reader._decode_code128', return_value=[])
 
-    assert read_barcode_from_pdf('any.pdf') is None
+    assert read_barcode_from_pdf('any.pdf', app_config) is None
 
 
-def test_read_barcode_returns_none_for_pdf_without_pages(mocker: MockerFixture) -> None:
+def test_read_barcode_returns_none_for_pdf_without_pages(
+    app_config: AppConfig,
+    mocker: MockerFixture,
+) -> None:
     mocker.patch('service.barcode_reader._render_top_band', return_value=None)
     decode = mocker.patch('service.barcode_reader._decode_code128')
 
-    assert read_barcode_from_pdf('any.pdf') is None
+    assert read_barcode_from_pdf('any.pdf', app_config) is None
     decode.assert_not_called()
 
 
 def test_read_barcode_logs_and_returns_none_on_decode_error(
     rendered_band: None,
+    app_config: AppConfig,
     mocker: MockerFixture,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -254,13 +298,16 @@ def test_read_barcode_logs_and_returns_none_on_decode_error(
         side_effect=UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'invalid'),
     )
 
-    assert read_barcode_from_pdf('any.pdf') is None
+    assert read_barcode_from_pdf('any.pdf', app_config) is None
     assert caplog.records[0].levelno == logging.WARNING
 
 
-def test_read_barcode_propagates_render_error(mocker: MockerFixture) -> None:
+def test_read_barcode_propagates_render_error(
+    app_config: AppConfig,
+    mocker: MockerFixture,
+) -> None:
     """PDF展開の失敗はprocess_pdf側でエラーフォルダ行きとして扱う"""
     mocker.patch('service.barcode_reader._render_top_band', side_effect=RuntimeError('破損PDF'))
 
     with pytest.raises(RuntimeError):
-        read_barcode_from_pdf('any.pdf')
+        read_barcode_from_pdf('any.pdf', app_config)

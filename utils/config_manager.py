@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Final
 
+
 def get_config_path() -> Path:
     # 実行ファイルのディレクトリを取得
     if getattr(sys, 'frozen', False):
@@ -12,7 +13,9 @@ def get_config_path() -> Path:
         base_path = Path(os.path.dirname(os.path.abspath(__file__)))
     return base_path / 'config.ini'
 
+
 CONFIG_PATH: Final[Path] = get_config_path()
+
 
 class ConfigManager:
     def __init__(self, config_file: Path | str = CONFIG_PATH) -> None:
@@ -40,9 +43,6 @@ class ConfigManager:
         except (IOError, OSError) as e:
             raise OSError(f"Failed to save config: {e}") from e
 
-    def get_path(self, key: str) -> Path:
-        return Path(self.config.get('Paths', key))
-
     def ensure_section(self, section: str) -> None:
         if section not in self.config:
             self.config[section] = {}
@@ -58,12 +58,22 @@ class AppConfig:
         self.error_dir: str = self.config.get('Directories', 'error_dir')
         self.done_dir: str = self.config.get('Directories', 'done_dir')
         self.log_dir: str = self.config.get('LOGGING', 'log_directory', fallback='logs')
+        # ログと同じ保存期間でエラーPDFも整理する
+        self.log_retention_days: int = self.config.getint('LOGGING', 'log_retention_days', fallback=7)
         self.ui_width: int = self.config.getint('UI', 'width', fallback=600)
         self.ui_height: int = self.config.getint('UI', 'height', fallback=500)
         self.auto_open_error_folder: bool = self.config.getboolean(
             'Options', 'auto_open_error_folder', fallback=True
         )
-        self.start_minimized: bool = self.config.getboolean('Options', 'start_minimized', fallback=True)
+        self.contrast_factor: float = self.config.getfloat('Barcode', 'contrast_factor', fallback=2.0)
+        # 72dpi基準の拡大率。等倍ではバーの太さが足りずデコードできない
+        self.render_zoom: float = self.config.getfloat('Barcode', 'render_zoom', fallback=2.0)
+        # ページ上端から探索する高さの割合
+        self.top_band_ratio: float = self.config.getfloat('Barcode', 'top_band_ratio', fallback=0.15)
+        # ページ幅に対する最小幅。帯の中に小さなバーコードが並んでいても大きい方だけを採用する
+        self.min_barcode_width_ratio: float = self.config.getfloat(
+            'Barcode', 'min_barcode_width_ratio', fallback=0.20
+        )
 
     def ensure_directories(self) -> list[str]:
         """取込・エラー・完了フォルダを作成し、新規作成したパスを返す"""
@@ -89,19 +99,3 @@ class AppConfig:
 def load_config() -> configparser.ConfigParser:
     return ConfigManager().config
 
-
-def get_config_value(
-    config: configparser.ConfigParser,
-    section: str,
-    key: str,
-    fallback: object = None,
-) -> object:
-    try:
-        value = config.get(section, key)
-        if isinstance(fallback, bool):
-            return value.lower() in ('true', '1', 'yes')
-        if isinstance(fallback, int):
-            return int(value)
-        return value
-    except (configparser.NoSectionError, configparser.NoOptionError):
-        return fallback

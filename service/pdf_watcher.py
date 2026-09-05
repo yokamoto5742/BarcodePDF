@@ -47,11 +47,14 @@ class PdfWatcher:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._signatures: dict[str, FileSignature] = {}
+        self._handled: set[str] = set()
 
     def start(self) -> None:
         if self._thread:
             return
 
+        # stop 後に再度 start しても _run が即終了しないよう落としておく
+        self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -68,22 +71,32 @@ class PdfWatcher:
             self.scan_once()
 
     def scan_once(self) -> None:
-        """target_dir を1回走査し、前回と同じ状態のPDFを処理する"""
-        stable_signatures: dict[str, FileSignature] = {}
+        """target_dir を1回走査し、前回と同じ状態のPDFを処理する
+
+        処理を試みたファイルも記録する。移動に失敗して取込フォルダに残ったファイルを、
+        内容が変わらないまま繰り返し処理しないため。
+        """
+        current_signatures: dict[str, FileSignature] = {}
 
         for entry in self._scan_pdf_entries():
             signature = _file_signature(entry.path)
             if signature is None:
                 continue
 
-            # 前回と同じサイズ・更新日時なら書き込みが完了している
-            if self._signatures.get(entry.path) == signature:
+            previous = self._signatures.get(entry.path)
+            current_signatures[entry.path] = signature
+
+            if previous != signature:
+                # 内容が変わった＝別のファイルが置かれたので処理対象に戻す
+                self._handled.discard(entry.path)
+            elif entry.path not in self._handled:
+                # 前回と同じサイズ・更新日時になった初回だけ、書き込み完了とみなす
+                self._handled.add(entry.path)
                 process_pdf(entry.path, self.config, self.status_callback)
-                continue
 
-            stable_signatures[entry.path] = signature
-
-        self._signatures = stable_signatures
+        self._signatures = current_signatures
+        # 消えたファイルの記録は残さない（set が際限なく育つのを防ぐ）
+        self._handled &= current_signatures.keys()
 
     def _scan_pdf_entries(self) -> list[os.DirEntry[str]]:
         try:

@@ -18,13 +18,11 @@ height = 500
 
 [Options]
 auto_open_error_folder = False
-start_minimized = True
 
 [LOGGING]
 log_retention_days = 7
 log_directory = {log_dir}
 log_level = INFO
-debug_mode = False
 project_name = BarcodePDF
 """
 

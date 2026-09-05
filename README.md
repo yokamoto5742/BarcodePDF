@@ -98,9 +98,14 @@ done_dir = C:\pdfkarte\TmpPdf
 width = 600
 height = 500
 
+[Barcode]
+contrast_factor = 2.0
+render_zoom = 2.5
+top_band_ratio = 0.15
+min_barcode_width_ratio = 0.20
+
 [Options]
 auto_open_error_folder = True
-start_minimized = True
 
 [LOGGING]
 log_directory = C:\Shinseikai\BarcodePDF\log
@@ -115,8 +120,11 @@ project_name = BarcodePDF
 - `error_dir`: エラーファイルの保存先
 - `done_dir`: 処理済みファイルの保存先
 - `width`/`height`: アプリウィンドウのサイズ
+- `contrast_factor`: 読み取り前にかけるコントラスト強調の倍率
+- `render_zoom`: PDFページの描画拡大率（72dpi基準）
+- `top_band_ratio`: ページ上端からバーコードを探す高さの割合
+- `min_barcode_width_ratio`: 採用するバーコードの、ページ幅に対する最小幅
 - `auto_open_error_folder`: エラー時のフォルダ自動表示
-- `start_minimized`: 最小化で起動
 - `log_directory`: ログファイルの保存先
 - `log_retention_days`: ログファイルの保持日数
 - `log_level`: ログ出力レベル（DEBUG/INFO/WARNING/ERROR）

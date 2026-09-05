@@ -9,31 +9,22 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from utils.log_rotation import (
-    cleanup_error_pdfs,
-    cleanup_old_logs,
-    get_log_info,
-    setup_debug_logging,
-    setup_logging,
-)
+from utils.log_rotation import cleanup_old_logs, setup_logging
 
 PROJECT_ROOT = Path(__file__).parents[2]
 
 
-def make_config(error_dir: str | None = None, **overrides: str) -> configparser.ConfigParser:
+def make_config(**overrides: str) -> configparser.ConfigParser:
     values = {
         'log_directory': 'logs',
         'log_retention_days': '7',
         'project_name': 'BarcodePDF',
         'log_level': 'INFO',
-        'debug_mode': 'False',
     }
     values.update(overrides)
 
     config = configparser.ConfigParser()
     config['LOGGING'] = values
-    if error_dir is not None:
-        config['Directories'] = {'error_dir': error_dir}
     return config
 
 
@@ -50,23 +41,6 @@ def log_dir(tmp_path: Path) -> Path:
     directory = tmp_path / 'log'
     directory.mkdir()
     return directory
-
-
-@pytest.fixture
-def error_dir(tmp_path: Path) -> Path:
-    directory = tmp_path / 'error'
-    directory.mkdir()
-    return directory
-
-
-@pytest.fixture
-def debug_logger_cleanup() -> object:
-    """setup_debug_logging が 'debug' ロガーに残すハンドラを片付ける"""
-    yield
-    debug_logger = logging.getLogger('debug')
-    for handler in debug_logger.handlers[:]:
-        debug_logger.removeHandler(handler)
-        handler.close()
 
 
 # --- setup_logging（P1） ---
@@ -228,7 +202,7 @@ def test_cleanup_continues_after_remove_error(
 ) -> None:
     touch_log(log_dir, 'BarcodePDF.log.2020-01-01.log', days_old=30)
     touch_log(log_dir, 'BarcodePDF.log.2020-01-02.log', days_old=30)
-    mocker.patch('utils.log_rotation.os.remove', side_effect=OSError('使用中'))
+    mocker.patch('utils.file_cleanup.os.remove', side_effect=OSError('使用中'))
 
     cleanup_old_logs(str(log_dir), 7, 'BarcodePDF')
 
@@ -236,182 +210,7 @@ def test_cleanup_continues_after_remove_error(
     assert len(errors) == 2
 
 
-def test_cleanup_logs_error_for_missing_directory(caplog: pytest.LogCaptureFixture) -> None:
+def test_cleanup_does_nothing_for_missing_directory(caplog: pytest.LogCaptureFixture) -> None:
     cleanup_old_logs('C:/no/such/directory', 7, 'BarcodePDF')
 
-    assert caplog.records[0].levelno == logging.ERROR
-
-
-# --- cleanup_error_pdfs（P1: ファイル削除を伴う） ---
-
-
-def test_cleanup_error_pdfs_removes_expired_pdf(error_dir: Path) -> None:
-    expired = touch_log(error_dir, 'old.pdf', days_old=30)
-
-    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
-
-    assert not expired.exists()
-
-
-def test_cleanup_error_pdfs_keeps_recent_pdf(error_dir: Path) -> None:
-    recent = touch_log(error_dir, 'new.pdf', days_old=1)
-
-    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
-
-    assert recent.exists()
-
-
-def test_cleanup_error_pdfs_ignores_non_pdf_files(error_dir: Path) -> None:
-    other = touch_log(error_dir, 'memo.txt', days_old=30)
-
-    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
-
-    assert other.exists()
-
-
-def test_cleanup_error_pdfs_matches_extension_case_insensitively(error_dir: Path) -> None:
-    expired = touch_log(error_dir, 'OLD.PDF', days_old=30)
-
-    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
-
-    assert not expired.exists()
-
-
-def test_cleanup_error_pdfs_skips_subdirectories(error_dir: Path) -> None:
-    """拡張子が一致するフォルダを削除対象にしない"""
-    sub_directory = error_dir / 'archive.pdf'
-    sub_directory.mkdir()
-
-    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
-
-    assert sub_directory.is_dir()
-
-
-def test_cleanup_error_pdfs_does_nothing_without_directories_section(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    cleanup_error_pdfs(make_config(), 7)
-
     assert caplog.records == []
-
-
-def test_cleanup_error_pdfs_does_nothing_for_missing_directory(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    cleanup_error_pdfs(make_config(error_dir='C:/no/such/directory'), 7)
-
-    assert caplog.records == []
-
-
-def test_cleanup_error_pdfs_continues_after_remove_error(
-    error_dir: Path,
-    mocker: MockerFixture,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    touch_log(error_dir, 'one.pdf', days_old=30)
-    touch_log(error_dir, 'two.pdf', days_old=30)
-    mocker.patch('utils.log_rotation.os.remove', side_effect=OSError('使用中'))
-
-    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
-
-    errors = [record for record in caplog.records if record.levelno == logging.ERROR]
-    assert len(errors) == 2
-
-
-def test_setup_logging_cleans_up_error_pdfs(log_dir: Path, error_dir: Path) -> None:
-    """ログローテーションと同じタイミングでエラーPDFも削除する"""
-    expired = touch_log(error_dir, 'old.pdf', days_old=30)
-
-    setup_logging(make_config(log_directory=str(log_dir), error_dir=str(error_dir)))
-
-    assert not expired.exists()
-
-
-# --- setup_debug_logging（P2） ---
-
-
-def test_setup_debug_logging_returns_none_when_disabled() -> None:
-    assert setup_debug_logging(make_config(debug_mode='False')) is None
-
-
-def test_setup_debug_logging_creates_logger(
-    log_dir: Path,
-    debug_logger_cleanup: None,
-) -> None:
-    debug_logger = setup_debug_logging(
-        make_config(debug_mode='True', log_directory=str(log_dir))
-    )
-
-    assert debug_logger is not None
-    assert debug_logger.level == logging.DEBUG
-    assert debug_logger.propagate is False
-    assert (log_dir / 'debug.log').exists()
-
-
-def test_setup_debug_logging_resolves_relative_directory(mocker: MockerFixture) -> None:
-    file_handler = mocker.patch('utils.log_rotation.logging.FileHandler')
-    file_handler.return_value.level = logging.NOTSET
-
-    setup_debug_logging(make_config(debug_mode='True', log_directory='logs'))
-
-    assert file_handler.call_args.args[0] == str(PROJECT_ROOT / 'logs' / 'debug.log')
-
-
-def test_setup_debug_logging_loads_config_when_omitted(mocker: MockerFixture) -> None:
-    load = mocker.patch('utils.log_rotation.load_config', return_value=make_config())
-
-    setup_debug_logging()
-
-    load.assert_called_once()
-
-
-def test_setup_debug_logging_returns_none_on_error(
-    mocker: MockerFixture,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    mocker.patch('utils.log_rotation.logging.FileHandler', side_effect=OSError('作成失敗'))
-
-    assert setup_debug_logging(make_config(debug_mode='True', log_directory='C:/x')) is None
-    assert caplog.records[-1].levelno == logging.ERROR
-
-
-# --- get_log_info（P2） ---
-
-
-def test_get_log_info_returns_absolute_paths(log_dir: Path) -> None:
-    info = get_log_info(make_config(log_directory=str(log_dir), project_name='BarcodePDF'))
-
-    assert info is not None
-    assert info['log_directory'] == str(log_dir)
-    assert info['main_log_file'] == str(log_dir / 'BarcodePDF.log')
-    assert info['log_retention_days'] == 7
-    assert info['debug_mode'] is False
-    assert info['debug_log_file'] is None
-
-
-def test_get_log_info_includes_debug_log_when_enabled(log_dir: Path) -> None:
-    info = get_log_info(make_config(log_directory=str(log_dir), debug_mode='True'))
-
-    assert info is not None
-    assert info['debug_log_file'] == str(log_dir / 'debug.log')
-
-
-def test_get_log_info_resolves_relative_directory() -> None:
-    info = get_log_info(make_config(log_directory='logs'))
-
-    assert info is not None
-    assert info['log_directory'] == str(PROJECT_ROOT / 'logs')
-
-
-def test_get_log_info_loads_config_when_omitted(mocker: MockerFixture) -> None:
-    load = mocker.patch('utils.log_rotation.load_config', return_value=make_config())
-
-    get_log_info()
-
-    load.assert_called_once()
-
-
-def test_get_log_info_returns_none_on_error(mocker: MockerFixture) -> None:
-    mocker.patch('utils.log_rotation.get_config_value', side_effect=RuntimeError('失敗'))
-
-    assert get_log_info(make_config()) is None

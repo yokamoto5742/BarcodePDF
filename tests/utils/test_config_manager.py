@@ -11,7 +11,6 @@ from utils.config_manager import (
     AppConfig,
     ConfigManager,
     get_config_path,
-    get_config_value,
     load_config,
 )
 
@@ -19,6 +18,15 @@ MINIMAL_INI = """[Directories]
 target_dir = C:\\target
 error_dir = C:\\err
 done_dir = C:\\done
+"""
+
+
+BARCODE_INI = """
+[Barcode]
+contrast_factor = 3.0
+render_zoom = 2.5
+top_band_ratio = 0.3
+min_barcode_width_ratio = 0.4
 """
 
 
@@ -74,13 +82,7 @@ def test_ensure_section_keeps_existing_values(config_file: Path) -> None:
 
     manager.ensure_section('Options')
 
-    assert manager.config.getboolean('Options', 'start_minimized') is True
-
-
-def test_get_path_returns_path_object(tmp_path: Path) -> None:
-    manager = ConfigManager(write_ini(tmp_path / 'c.ini', '[Paths]\nbase = C:\\base\n'))
-
-    assert manager.get_path('base') == Path('C:/base')
+    assert manager.config.getboolean('Options', 'auto_open_error_folder') is False
 
 
 # --- ConfigManager.save_config（P2） ---
@@ -113,17 +115,30 @@ def test_app_config_reads_typed_values(app_config: AppConfig, tmp_path: Path) ->
     assert app_config.ui_width == 600
     assert app_config.ui_height == 500
     assert app_config.auto_open_error_folder is False
-    assert app_config.start_minimized is True
+    assert app_config.log_retention_days == 7
+
+
+def test_app_config_reads_barcode_values(tmp_path: Path) -> None:
+    config = AppConfig(write_ini(tmp_path / 'c.ini', MINIMAL_INI + BARCODE_INI))
+
+    assert config.contrast_factor == 3.0
+    assert config.render_zoom == 2.5
+    assert config.top_band_ratio == 0.3
+    assert config.min_barcode_width_ratio == 0.4
 
 
 def test_app_config_uses_fallbacks_for_optional_values(tmp_path: Path) -> None:
     config = AppConfig(write_ini(tmp_path / 'c.ini', MINIMAL_INI))
 
     assert config.log_dir == 'logs'
+    assert config.log_retention_days == 7
     assert config.ui_width == 600
     assert config.ui_height == 500
     assert config.auto_open_error_folder is True
-    assert config.start_minimized is True
+    assert config.contrast_factor == 2.0
+    assert config.render_zoom == 2.0
+    assert config.top_band_ratio == 0.15
+    assert config.min_barcode_width_ratio == 0.20
 
 
 def test_app_config_raises_when_directories_section_missing(tmp_path: Path) -> None:
@@ -218,47 +233,3 @@ def test_get_config_path_uses_meipass_when_frozen(mocker: MockerFixture) -> None
 def test_load_config_returns_parser_with_directories() -> None:
     assert load_config().has_section('Directories')
 
-
-# --- get_config_value（P1） ---
-
-
-@pytest.fixture
-def parser() -> configparser.ConfigParser:
-    config = configparser.ConfigParser()
-    config.read_string('[S]\ntext = value\nnumber = 42\nflag = yes\noff = no\n')
-    return config
-
-
-def test_get_config_value_returns_string(parser: configparser.ConfigParser) -> None:
-    assert get_config_value(parser, 'S', 'text', 'fallback') == 'value'
-
-
-def test_get_config_value_converts_int(parser: configparser.ConfigParser) -> None:
-    assert get_config_value(parser, 'S', 'number', 0) == 42
-
-
-@pytest.mark.parametrize('key, expected', [('flag', True), ('off', False)])
-def test_get_config_value_converts_bool(
-    key: str,
-    expected: bool,
-    parser: configparser.ConfigParser,
-) -> None:
-    assert get_config_value(parser, 'S', key, False) is expected
-
-
-def test_get_config_value_returns_fallback_for_missing_section(
-    parser: configparser.ConfigParser,
-) -> None:
-    assert get_config_value(parser, 'None', 'text', 'fallback') == 'fallback'
-
-
-def test_get_config_value_returns_fallback_for_missing_key(
-    parser: configparser.ConfigParser,
-) -> None:
-    assert get_config_value(parser, 'S', 'missing', 7) == 7
-
-
-def test_get_config_value_returns_none_without_fallback(
-    parser: configparser.ConfigParser,
-) -> None:
-    assert get_config_value(parser, 'S', 'missing') is None

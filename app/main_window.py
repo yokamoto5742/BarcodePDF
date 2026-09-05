@@ -115,6 +115,10 @@ class PDFProcessorApp:
         self.config.save()
         self.ensure_directories()
 
+        # 新しい取込フォルダを対象にするため監視を貼り直す
+        self.stop_watching()
+        self.start_watching()
+
         setup_logging(self.config.config)
         messagebox.showinfo(DIALOG_SAVE_CONFIG_TITLE, DIALOG_SAVE_CONFIG_MESSAGE)
         logger.info(MSG_CONFIG_UPDATED)

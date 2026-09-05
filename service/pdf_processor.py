@@ -46,7 +46,8 @@ def is_valid_barcode(barcode: str) -> bool:
         return False
     if any(char in INVALID_FILENAME_CHARS or ord(char) < 32 for char in barcode):
         return False
-    if barcode.upper() in RESERVED_FILENAMES:
+    # デバイス名の予約は拡張子の有無に関わらず適用される（CON.foo も作成できない）
+    if barcode.upper().split('.')[0] in RESERVED_FILENAMES:
         return False
     # 先頭・末尾の空白とピリオドはWindowsが除去するため別名になる（'..' もここで弾かれる）
     return barcode.strip(' .') == barcode
@@ -74,21 +75,26 @@ def open_error_folder(error_dir: str) -> None:
         logger.error(MSG_OPEN_ERROR_FOLDER_FAILED.format(error=str(e)))
 
 
+def _move_overwriting(source: str, destination: str) -> None:
+    """同名ファイルがあれば上書きして移動する"""
+    if os.path.exists(destination):
+        os.remove(destination)
+    shutil.move(source, destination)
+
+
 def _move_to_done_dir(
     pdf_path: str,
     barcode_data: str,
     config: AppConfig,
     status_callback: StatusCallback,
 ) -> None:
+    filename = os.path.basename(pdf_path)
     new_filename = f"{barcode_data}.pdf"
     done_path = os.path.join(config.done_dir, new_filename)
 
-    # 同名ファイルは上書きする
-    if os.path.exists(done_path):
-        os.remove(done_path)
-    shutil.move(pdf_path, done_path)
+    _move_overwriting(pdf_path, done_path)
 
-    message = MSG_PROCESS_DONE.format(source=os.path.basename(pdf_path), destination=new_filename)
+    message = MSG_PROCESS_DONE.format(source=filename, destination=new_filename)
     logger.info(message)
     status_callback(message)
     log_trace(TRACE_RESULT_SUCCESS, pdf_path, barcode_data, done_path)
@@ -101,14 +107,12 @@ def _move_to_error_dir(
     result: str,
     barcode: str | None = None,
 ) -> None:
-    error_path = os.path.join(config.error_dir, os.path.basename(pdf_path))
+    filename = os.path.basename(pdf_path)
+    error_path = os.path.join(config.error_dir, filename)
 
-    # 同名ファイルは上書きする
-    if os.path.exists(error_path):
-        os.remove(error_path)
-    shutil.move(pdf_path, error_path)
+    _move_overwriting(pdf_path, error_path)
 
-    message = MSG_MOVED_TO_ERROR.format(filename=os.path.basename(pdf_path))
+    message = MSG_MOVED_TO_ERROR.format(filename=filename)
     logger.info(message)
     status_callback(message)
     log_trace(result, pdf_path, barcode, error_path)
@@ -140,24 +144,23 @@ def process_pdf(pdf_path: str, config: AppConfig, status_callback: StatusCallbac
             return
 
         logger.info(MSG_PROCESSING_START.format(path=pdf_path))
-        barcode_data = read_barcode_from_pdf(pdf_path)
+        barcode_data = read_barcode_from_pdf(pdf_path, config)
 
         if barcode_data and is_valid_barcode(barcode_data):
             _move_to_done_dir(pdf_path, barcode_data, config, status_callback)
-        elif barcode_data:
-            message = MSG_BARCODE_INVALID.format(
-                filename=os.path.basename(pdf_path), barcode=barcode_data
-            )
-            logger.warning(message)
-            status_callback(message)
-            _move_to_error_dir(
-                pdf_path, config, status_callback, TRACE_RESULT_INVALID_BARCODE, barcode_data
-            )
+            return
+
+        filename = os.path.basename(pdf_path)
+        if barcode_data:
+            result = TRACE_RESULT_INVALID_BARCODE
+            message = MSG_BARCODE_INVALID.format(filename=filename, barcode=barcode_data)
         else:
-            message = MSG_BARCODE_NOT_FOUND.format(filename=os.path.basename(pdf_path))
-            logger.warning(message)
-            status_callback(message)
-            _move_to_error_dir(pdf_path, config, status_callback, TRACE_RESULT_NO_BARCODE)
+            result = TRACE_RESULT_NO_BARCODE
+            message = MSG_BARCODE_NOT_FOUND.format(filename=filename)
+
+        logger.warning(message)
+        status_callback(message)
+        _move_to_error_dir(pdf_path, config, status_callback, result, barcode_data)
 
     except Exception as e:
         message = MSG_PROCESS_ERROR.format(filename=os.path.basename(pdf_path), error=str(e))

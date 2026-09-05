@@ -1,7 +1,7 @@
 import subprocess
 
 
-def build_executable():
+def build_executable() -> None:
     subprocess.run([
         "pyinstaller",
         "--name=BarcodePDF",
@@ -10,9 +10,9 @@ def build_executable():
         "--add-data", "utils/config.ini:.",
         "--collect-binaries", "pyzbar",
         "main.py"
-    ])
+    ], check=True)
 
-    print(f"Executable built successfully.")
+    print("Executable built successfully.")
 
 
 if __name__ == "__main__":
