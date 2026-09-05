@@ -34,9 +34,6 @@ from utils.log_rotation import setup_logging
 
 logger = logging.getLogger(__name__)
 
-# ステータスキューを取り出す間隔（ミリ秒）
-STATUS_POLL_MS = 200
-
 
 class PDFProcessorApp:
     def __init__(self, master: tk.Tk) -> None:
@@ -154,7 +151,7 @@ class PDFProcessorApp:
                 break
             self._append_status(message)
 
-        self.master.after(STATUS_POLL_MS, self._drain_status_queue)
+        self.master.after(self.config.status_poll_ms, self._drain_status_queue)
 
     def _append_status(self, message: str) -> None:
         self.status_text.config(state=tk.NORMAL)

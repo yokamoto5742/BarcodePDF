@@ -60,6 +60,8 @@ class AppConfig:
         self.log_retention_days: int = self.config.getint('LOGGING', 'log_retention_days', fallback=7)
         self.ui_width: int = self.config.getint('UI', 'width', fallback=600)
         self.ui_height: int = self.config.getint('UI', 'height', fallback=500)
+        # ステータスキューを取り出す間隔（ミリ秒）
+        self.status_poll_ms: int = self.config.getint('UI', 'status_poll_ms', fallback=200)
         self.auto_open_error_folder: bool = self.config.getboolean(
             'Options', 'auto_open_error_folder', fallback=True
         )
