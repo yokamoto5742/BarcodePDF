@@ -14,7 +14,7 @@ def delete_files_older_than(
     is_target: Callable[[str], bool],
     label: str,
 ) -> None:
-    """directory 直下の対象ファイルのうち、保存期間を過ぎたものを削除する"""
+    """directory 直下の対象ファイルのうち保存期間を過ぎたものを削除する"""
     if not os.path.isdir(directory):
         return
 

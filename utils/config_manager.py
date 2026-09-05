@@ -6,7 +6,6 @@ from typing import Final
 
 
 def get_config_path() -> Path:
-    # 実行ファイルのディレクトリを取得
     if getattr(sys, 'frozen', False):
         base_path = Path(sys._MEIPASS)  # type: ignore[attr-defined]
     else:
@@ -58,7 +57,6 @@ class AppConfig:
         self.error_dir: str = self.config.get('Directories', 'error_dir')
         self.done_dir: str = self.config.get('Directories', 'done_dir')
         self.log_dir: str = self.config.get('LOGGING', 'log_directory', fallback='logs')
-        # ログと同じ保存期間でエラーPDFも整理する
         self.log_retention_days: int = self.config.getint('LOGGING', 'log_retention_days', fallback=7)
         self.ui_width: int = self.config.getint('UI', 'width', fallback=600)
         self.ui_height: int = self.config.getint('UI', 'height', fallback=500)
@@ -66,7 +64,6 @@ class AppConfig:
             'Options', 'auto_open_error_folder', fallback=True
         )
         self.contrast_factor: float = self.config.getfloat('Barcode', 'contrast_factor', fallback=2.0)
-        # 72dpi基準の拡大率。等倍ではバーの太さが足りずデコードできない
         self.render_zoom: float = self.config.getfloat('Barcode', 'render_zoom', fallback=2.0)
         # ページ上端から探索する高さの割合
         self.top_band_ratio: float = self.config.getfloat('Barcode', 'top_band_ratio', fallback=0.15)

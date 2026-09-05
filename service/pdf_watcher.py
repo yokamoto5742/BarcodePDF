@@ -1,9 +1,4 @@
-"""target_dir に入ったPDFを監視してバーコード処理へ渡すフォルダ監視
-
-スキャナーによってはスキャン直後にファイル名を変更するため、ファイルイベントに依存すると
-移動元が消えて取りこぼす。サイズと更新日時が前回走査から変化していないことを確認してから
-処理することで、リネームや書き込み途中のファイルを避ける。
-"""
+"""target_dir に入ったPDFを監視してバーコード処理へ渡すフォルダ監視"""
 
 import logging
 import os
@@ -33,7 +28,7 @@ def _file_signature(path: str) -> FileSignature | None:
 
 
 class PdfWatcher:
-    """target_dir を一定間隔で走査し、書き込みが完了したPDFを処理する"""
+    """target_dir を一定間隔で走査し書き込みが完了したPDFを処理する"""
 
     def __init__(
         self,
@@ -71,11 +66,7 @@ class PdfWatcher:
             self.scan_once()
 
     def scan_once(self) -> None:
-        """target_dir を1回走査し、前回と同じ状態のPDFを処理する
-
-        処理を試みたファイルも記録する。移動に失敗して取込フォルダに残ったファイルを、
-        内容が変わらないまま繰り返し処理しないため。
-        """
+        """target_dir を1回走査し前回と同じ状態のPDFを処理する"""
         current_signatures: dict[str, FileSignature] = {}
 
         for entry in self._scan_pdf_entries():
@@ -90,12 +81,12 @@ class PdfWatcher:
                 # 内容が変わった＝別のファイルが置かれたので処理対象に戻す
                 self._handled.discard(entry.path)
             elif entry.path not in self._handled:
-                # 前回と同じサイズ・更新日時になった初回だけ、書き込み完了とみなす
+                # 前回と同じサイズ・更新日時になった初回だけ書き込み完了とみなす
                 self._handled.add(entry.path)
                 process_pdf(entry.path, self.config, self.status_callback)
 
         self._signatures = current_signatures
-        # 消えたファイルの記録は残さない（set が際限なく育つのを防ぐ）
+        # 消えたファイルの記録は残さない
         self._handled &= current_signatures.keys()
 
     def _scan_pdf_entries(self) -> list[os.DirEntry[str]]:

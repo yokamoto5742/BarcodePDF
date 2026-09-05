@@ -8,7 +8,6 @@ from utils.log_rotation import setup_logging
 
 def main() -> None:
     setup_logging()
-    # ログ設定の副作用ではなく、起動時に明示的にエラーPDFを片付ける
     cleanup_error_pdfs(AppConfig())
     root = tk.Tk()
     PDFProcessorApp(root)

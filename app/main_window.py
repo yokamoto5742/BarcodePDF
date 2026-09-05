@@ -143,7 +143,7 @@ class PDFProcessorApp:
         self.update_status(MSG_WATCH_STOPPED)
 
     def update_status(self, message: str) -> None:
-        """監視スレッドからも呼ばれるため、ウィジェットには直接触れずキューへ渡す"""
+        """監視スレッドからも呼ばれるためウィジェットには直接触れずキューへ渡す"""
         self._status_queue.put(message)
 
     def _drain_status_queue(self) -> None:

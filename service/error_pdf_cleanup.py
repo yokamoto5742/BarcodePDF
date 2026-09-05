@@ -1,4 +1,4 @@
-"""エラーフォルダに溜まったPDFの後始末"""
+"""エラーフォルダに溜まったPDFの削除"""
 
 from utils.config_manager import AppConfig
 from utils.constants import LABEL_ERROR_PDF

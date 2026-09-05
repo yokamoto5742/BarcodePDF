@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 def _render_top_band(pdf_path: str, config: AppConfig) -> np.ndarray | None:
     """1ページ目の上部だけを高解像度でレンダリングしてグレースケール配列にする"""
-    # 破損PDFで例外が起きてもファイルハンドルを解放するためwith文を使う
     with pymupdf.open(pdf_path) as pdf_document:
         if pdf_document.page_count == 0:
             return None
