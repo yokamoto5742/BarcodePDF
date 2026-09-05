@@ -66,6 +66,7 @@ def setup_logging(config: configparser.ConfigParser | None = None) -> None:
         root_logger.addHandler(console_handler)
 
         cleanup_old_logs(log_directory, log_retention_days, project_name)
+        cleanup_error_pdfs(config, log_retention_days)
 
         logging.info(f"ログシステムが初期化されました: {log_file}")
 
@@ -101,6 +102,40 @@ def cleanup_old_logs(log_directory: str, retention_days: int, project_name: str)
 
     except Exception as e:
         logging.error(f"ログクリーンアップ処理中にエラーが発生しました: {str(e)}")
+
+
+def cleanup_error_pdfs(config: configparser.ConfigParser, retention_days: int) -> None:
+    """ログローテーションと同じタイミングで、保存期間を過ぎたエラーPDFを削除する"""
+    error_directory = str(get_config_value(config, 'Directories', 'error_dir', '') or '')
+    if not os.path.isdir(error_directory):
+        return
+
+    try:
+        now = datetime.now()
+        deleted_count = 0
+
+        for filename in os.listdir(error_directory):
+            if not filename.lower().endswith('.pdf'):
+                continue
+
+            file_path = os.path.join(error_directory, filename)
+            if not os.path.isfile(file_path):
+                continue
+
+            try:
+                file_modification_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                if now - file_modification_time >= timedelta(days=retention_days):
+                    os.remove(file_path)
+                    logging.info(f"古いエラーPDFを削除しました: {filename}")
+                    deleted_count += 1
+            except OSError as e:
+                logging.error(f"エラーPDFの削除中にエラーが発生しました {filename}: {str(e)}")
+
+        if deleted_count > 0:
+            logging.info(f"合計 {deleted_count} 個の古いエラーPDFを削除しました")
+
+    except Exception as e:
+        logging.error(f"エラーPDFのクリーンアップ処理中にエラーが発生しました: {str(e)}")
 
 
 def setup_debug_logging(config: configparser.ConfigParser | None = None) -> logging.Logger | None:

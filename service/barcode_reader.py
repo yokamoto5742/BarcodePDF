@@ -9,20 +9,23 @@ from PIL import Image, ImageEnhance
 from pyzbar.pyzbar import Decoded, decode
 from pyzbar.wrapper import ZBarSymbol
 
+from utils.config_manager import load_config
 from utils.constants import MSG_BARCODE_READ_ERROR
 
 logger = logging.getLogger(__name__)
 
-CONTRAST_FACTOR = 2.0
+_config = load_config()
 
-# 72dpi基準の拡大率。等倍ではバーの太さが足りずデコードできない
-RENDER_ZOOM = 3.0
+CONTRAST_FACTOR = _config.getfloat('Barcode', 'contrast_factor', fallback=2.0)
+
+# 72dpi基準の拡大率。等倍ではバーの太さが足りずデコードできない（既定は150dpi相当）
+RENDER_ZOOM = _config.getfloat('Barcode', 'render_zoom', fallback=2.0)
 
 # ページ上端から探索する高さの割合。これより下の小さなバーコードやQRは画像に含めない
-TOP_BAND_RATIO = 0.15
+TOP_BAND_RATIO = _config.getfloat('Barcode', 'top_band_ratio', fallback=0.15)
 
 # ページ幅に対する最小幅。帯の中に小さなバーコードが並んでいても大きい方だけを採用する
-MIN_BARCODE_WIDTH_RATIO = 0.20
+MIN_BARCODE_WIDTH_RATIO = _config.getfloat('Barcode', 'min_barcode_width_ratio', fallback=0.20)
 
 
 def _render_top_band(pdf_path: str) -> np.ndarray | None:

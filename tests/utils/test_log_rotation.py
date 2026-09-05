@@ -9,12 +9,18 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from utils.log_rotation import cleanup_old_logs, get_log_info, setup_debug_logging, setup_logging
+from utils.log_rotation import (
+    cleanup_error_pdfs,
+    cleanup_old_logs,
+    get_log_info,
+    setup_debug_logging,
+    setup_logging,
+)
 
 PROJECT_ROOT = Path(__file__).parents[2]
 
 
-def make_config(**overrides: str) -> configparser.ConfigParser:
+def make_config(error_dir: str | None = None, **overrides: str) -> configparser.ConfigParser:
     values = {
         'log_directory': 'logs',
         'log_retention_days': '7',
@@ -26,6 +32,8 @@ def make_config(**overrides: str) -> configparser.ConfigParser:
 
     config = configparser.ConfigParser()
     config['LOGGING'] = values
+    if error_dir is not None:
+        config['Directories'] = {'error_dir': error_dir}
     return config
 
 
@@ -40,6 +48,13 @@ def touch_log(directory: Path, name: str, days_old: float = 0) -> Path:
 @pytest.fixture
 def log_dir(tmp_path: Path) -> Path:
     directory = tmp_path / 'log'
+    directory.mkdir()
+    return directory
+
+
+@pytest.fixture
+def error_dir(tmp_path: Path) -> Path:
+    directory = tmp_path / 'error'
     directory.mkdir()
     return directory
 
@@ -225,6 +240,91 @@ def test_cleanup_logs_error_for_missing_directory(caplog: pytest.LogCaptureFixtu
     cleanup_old_logs('C:/no/such/directory', 7, 'BarcodePDF')
 
     assert caplog.records[0].levelno == logging.ERROR
+
+
+# --- cleanup_error_pdfs（P1: ファイル削除を伴う） ---
+
+
+def test_cleanup_error_pdfs_removes_expired_pdf(error_dir: Path) -> None:
+    expired = touch_log(error_dir, 'old.pdf', days_old=30)
+
+    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
+
+    assert not expired.exists()
+
+
+def test_cleanup_error_pdfs_keeps_recent_pdf(error_dir: Path) -> None:
+    recent = touch_log(error_dir, 'new.pdf', days_old=1)
+
+    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
+
+    assert recent.exists()
+
+
+def test_cleanup_error_pdfs_ignores_non_pdf_files(error_dir: Path) -> None:
+    other = touch_log(error_dir, 'memo.txt', days_old=30)
+
+    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
+
+    assert other.exists()
+
+
+def test_cleanup_error_pdfs_matches_extension_case_insensitively(error_dir: Path) -> None:
+    expired = touch_log(error_dir, 'OLD.PDF', days_old=30)
+
+    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
+
+    assert not expired.exists()
+
+
+def test_cleanup_error_pdfs_skips_subdirectories(error_dir: Path) -> None:
+    """拡張子が一致するフォルダを削除対象にしない"""
+    sub_directory = error_dir / 'archive.pdf'
+    sub_directory.mkdir()
+
+    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
+
+    assert sub_directory.is_dir()
+
+
+def test_cleanup_error_pdfs_does_nothing_without_directories_section(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cleanup_error_pdfs(make_config(), 7)
+
+    assert caplog.records == []
+
+
+def test_cleanup_error_pdfs_does_nothing_for_missing_directory(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    cleanup_error_pdfs(make_config(error_dir='C:/no/such/directory'), 7)
+
+    assert caplog.records == []
+
+
+def test_cleanup_error_pdfs_continues_after_remove_error(
+    error_dir: Path,
+    mocker: MockerFixture,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    touch_log(error_dir, 'one.pdf', days_old=30)
+    touch_log(error_dir, 'two.pdf', days_old=30)
+    mocker.patch('utils.log_rotation.os.remove', side_effect=OSError('使用中'))
+
+    cleanup_error_pdfs(make_config(error_dir=str(error_dir)), 7)
+
+    errors = [record for record in caplog.records if record.levelno == logging.ERROR]
+    assert len(errors) == 2
+
+
+def test_setup_logging_cleans_up_error_pdfs(log_dir: Path, error_dir: Path) -> None:
+    """ログローテーションと同じタイミングでエラーPDFも削除する"""
+    expired = touch_log(error_dir, 'old.pdf', days_old=30)
+
+    setup_logging(make_config(log_directory=str(log_dir), error_dir=str(error_dir)))
+
+    assert not expired.exists()
 
 
 # --- setup_debug_logging（P2） ---

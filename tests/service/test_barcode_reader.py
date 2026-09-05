@@ -51,9 +51,9 @@ def test_render_top_band_crops_to_top_ratio(tmp_path: Path) -> None:
 
     assert gray is not None
     # 高さのみTOP_BAND_RATIOで切り取り、幅はページ全体をRENDER_ZOOM倍で描画する
-    assert gray.shape == (
-        int(PAGE_SIZE * TOP_BAND_RATIO * RENDER_ZOOM),
-        int(PAGE_SIZE * RENDER_ZOOM),
+    # 拡大率が整数倍とは限らないため、ピクセル数の丸め差は許容する
+    assert gray.shape == pytest.approx(
+        (PAGE_SIZE * TOP_BAND_RATIO * RENDER_ZOOM, PAGE_SIZE * RENDER_ZOOM), abs=1
     )
 
 
