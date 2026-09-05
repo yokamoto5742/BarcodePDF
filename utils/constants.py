@@ -3,7 +3,6 @@
 APP_TITLE = "BarcodePDF"
 
 LABEL_TARGET_DIR = "取込フォルダ:"
-LABEL_PROCESSING_DIR = "処理フォルダ:"
 LABEL_ERROR_DIR = "エラーフォルダ:"
 LABEL_DONE_DIR = "完了フォルダ:"
 LABEL_LOG_DIR = "ログフォルダ:"
@@ -21,16 +20,12 @@ DIALOG_QUIT_MESSAGE = "アプリケーションを終了しますか？"
 
 MSG_CONFIG_UPDATED = "設定が更新されました"
 MSG_DIRECTORY_CREATED = "フォルダを作成しました: {directory}"
-MSG_EXISTING_PDF_START = "フォルダ内のPDFファイルを処理しています..."
-MSG_EXISTING_PDF_DONE = "フォルダ内のPDFファイルの処理が完了しました。"
 MSG_WATCH_STARTED = "{directory} の監視を開始しました..."
 MSG_WATCH_STOPPED = "監視を停止しました。"
 MSG_APP_QUIT = "アプリケーションを終了します"
 
-MSG_FILE_MOVED = "移動しました: {source} -> {destination}"
-MSG_FILE_MOVE_ERROR = "{filename} の移動中にエラーが発生しました: {error}"
+MSG_SCAN_ERROR = "{directory} の走査中にエラーが発生しました: {error}"
 
-MSG_PDF_DETECTED = "新しいPDFファイルを検出しました: {path}"
 MSG_PROCESSING_START = "PDFの処理を開始: {path}"
 MSG_FILE_NOT_FOUND = "ファイルが見つかりません: {path}"
 MSG_PROCESS_DONE = "処理完了: {source} -> {destination}"

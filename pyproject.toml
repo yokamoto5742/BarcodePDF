@@ -1,6 +1,6 @@
 [project]
 name = "barcodepdf"
-version = "1.1.1"
+version = "1.2.0"
 requires-python = ">=3.13"
 
 dependencies = [
@@ -9,7 +9,6 @@ dependencies = [
     "pillow>=10.4.0",
     "pymupdf>=1.24.7",
     "pyzbar>=0.1.9",
-    "watchdog>=4.0.1",
 ]
 
 [dependency-groups]

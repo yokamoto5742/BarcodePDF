@@ -9,7 +9,6 @@ from utils.config_manager import AppConfig
 
 CONFIG_TEMPLATE = """[Directories]
 target_dir = {target_dir}
-processing_dir = {processing_dir}
 error_dir = {error_dir}
 done_dir = {done_dir}
 
@@ -33,14 +32,13 @@ project_name = BarcodePDF
 @pytest.fixture
 def config_file(tmp_path: Path) -> Path:
     """作業フォルダを実作成し、それらを指すconfig.iniのパスを返す"""
-    for name in ('target', 'processing', 'error', 'done', 'log'):
+    for name in ('target', 'error', 'done', 'log'):
         (tmp_path / name).mkdir()
 
     path = tmp_path / 'config.ini'
     path.write_text(
         CONFIG_TEMPLATE.format(
             target_dir=tmp_path / 'target',
-            processing_dir=tmp_path / 'processing',
             error_dir=tmp_path / 'error',
             done_dir=tmp_path / 'done',
             log_dir=tmp_path / 'log',
@@ -62,9 +60,9 @@ def status_messages() -> list[str]:
 
 
 @pytest.fixture
-def pdf_in_processing(app_config: AppConfig) -> Path:
-    """処理フォルダに置かれたPDFファイル（中身の妥当性は問わない）"""
-    path = Path(app_config.processing_dir) / 'input.pdf'
+def pdf_in_target(app_config: AppConfig) -> Path:
+    """取込フォルダに置かれたPDFファイル（中身の妥当性は問わない）"""
+    path = Path(app_config.target_dir) / 'input.pdf'
     path.write_bytes(b'%PDF-1.7 dummy')
     return path
 

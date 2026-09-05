@@ -17,7 +17,6 @@ from utils.config_manager import (
 
 MINIMAL_INI = """[Directories]
 target_dir = C:\\target
-processing_dir = C:\\in
 error_dir = C:\\err
 done_dir = C:\\done
 """
@@ -109,7 +108,6 @@ def test_save_config_reports_save_failure(config_file: Path, mocker: MockerFixtu
 
 def test_app_config_reads_typed_values(app_config: AppConfig, tmp_path: Path) -> None:
     assert app_config.target_dir == str(tmp_path / 'target')
-    assert app_config.processing_dir == str(tmp_path / 'processing')
     assert app_config.error_dir == str(tmp_path / 'error')
     assert app_config.done_dir == str(tmp_path / 'done')
     assert app_config.ui_width == 600
@@ -135,7 +133,7 @@ def test_app_config_raises_when_directories_section_missing(tmp_path: Path) -> N
 
 def test_app_config_raises_when_directory_key_missing(tmp_path: Path) -> None:
     with pytest.raises(configparser.NoOptionError):
-        AppConfig(write_ini(tmp_path / 'c.ini', '[Directories]\nprocessing_dir = C:\\in\n'))
+        AppConfig(write_ini(tmp_path / 'c.ini', '[Directories]\nerror_dir = C:\\err\n'))
 
 
 # --- AppConfig.ensure_directories（P0） ---
@@ -180,14 +178,14 @@ def test_ensure_directories_creates_nested_path(app_config: AppConfig, tmp_path:
 
 
 def test_save_round_trips_values(app_config: AppConfig, config_file: Path, tmp_path: Path) -> None:
-    app_config.processing_dir = str(tmp_path / 'new_processing')
+    app_config.target_dir = str(tmp_path / 'new_target')
     app_config.log_dir = str(tmp_path / 'new_log')
     app_config.auto_open_error_folder = True
 
     app_config.save()
 
     reloaded = AppConfig(config_file)
-    assert reloaded.processing_dir == str(tmp_path / 'new_processing')
+    assert reloaded.target_dir == str(tmp_path / 'new_target')
     assert reloaded.log_dir == str(tmp_path / 'new_log')
     assert reloaded.auto_open_error_folder is True
 

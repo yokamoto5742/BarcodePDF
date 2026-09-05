@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 概要
 
 PDF内のCODE128バーコードを読み取り、その内容でファイル名を変更するWindows向けデスクトップアプリ。
-tkinter GUI + watchdog によるフォルダ監視で常駐動作する。
+tkinter GUI + 取込フォルダの定期走査（ポーリング）で常駐動作する。
 
 ## 環境とコマンド
 

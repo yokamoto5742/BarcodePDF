@@ -26,7 +26,7 @@ BarcodePDFは、PDFファイルからバーコードを自動的に読み取り�
 uv sync
 ```
 
-主な依存: opencv-python-headless / PyMuPDF / Pillow / pyzbar / watchdog / numpy
+主な依存: opencv-python-headless / PyMuPDF / Pillow / pyzbar / numpy
 
 ### システム要件
 - **Windows**: Windows 10 64ビット以上推奨
@@ -41,7 +41,6 @@ uv sync
    ```
    C:\Shinseikai\BarcodePDF\
    ├── preprocessing\ (取込フォルダ・スキャナーの出力先)
-   ├── processing\     (処理対象フォルダ)
    ├── error\         (エラーファイル用)
    └── log\           (ログファイル用)
    ```
@@ -61,8 +60,7 @@ uv run python main.py
 
 アプリケーション起動後、以下の設定が可能です：
 
-- **取込フォルダ**: スキャナーがPDFを出力するフォルダ（処理フォルダへ自動的に移動されます）
-- **処理フォルダ**: バーコード読み取り対象のPDFファイルを配置するフォルダ
+- **取込フォルダ**: スキャナーがPDFを出力するフォルダ（バーコード読み取りの対象）
 - **エラーフォルダ**: バーコードが検出できないファイルの移動先
 - **完了フォルダ**: 処理済みファイルの移動先
 - **ログフォルダ**: ログファイルの保存先
@@ -71,12 +69,11 @@ uv run python main.py
 ### 3. PDF処理の流れ
 
 1. スキャナーがPDFファイルを**取込フォルダ**に出力
-2. アプリが2秒ごとに取込フォルダを走査し、書き込みが完了したPDFを**処理フォルダ**へ移動
-3. 処理フォルダのPDFを検出し、バーコード読み取り処理を実行
-4. 成功時：バーコード内容でファイル名を変更し**完了フォルダ**に移動
-5. 失敗時：元のファイル名で**エラーフォルダ**に移動
+2. アプリが2秒ごとに取込フォルダを走査し、書き込みが完了したPDFにバーコード読み取り処理を実行
+3. 成功時：バーコード内容でファイル名を変更し**完了フォルダ**に移動
+4. 失敗時：元のファイル名で**エラーフォルダ**に移動
 
-処理フォルダにPDFを直接配置しても処理されます。
+取込フォルダにPDFを直接配置しても処理されます。
 
 取込フォルダの検出はファイル更新イベントではなく、サイズと更新日時が前回の走査から
 変化していないことの確認によって行います。スキャン直後にファイル名を変更するスキャナーでも、
@@ -94,7 +91,6 @@ uv run python main.py
 ```ini
 [Directories]
 target_dir = C:\Shinseikai\BarcodePDF\preprocessing
-processing_dir = C:\Shinseikai\BarcodePDF\processing
 error_dir = C:\Shinseikai\BarcodePDF\error
 done_dir = C:\pdfkarte\TmpPdf
 
@@ -115,8 +111,7 @@ project_name = BarcodePDF
 
 ### 設定項目の説明
 
-- `target_dir`: スキャナーの出力先フォルダ（PDFを処理フォルダへ移動する取込元）
-- `processing_dir`: 処理対象PDFファイルの監視フォルダ
+- `target_dir`: スキャナーの出力先フォルダ（バーコード読み取りの対象）
 - `error_dir`: エラーファイルの保存先
 - `done_dir`: 処理済みファイルの保存先
 - `width`/`height`: アプリウィンドウのサイズ
@@ -142,8 +137,8 @@ project_name = BarcodePDF
 処理を終えたファイルごとに、移動元・バーコード・移動先を1行で記録します。
 
 ```
-2026-09-01 18:30:12,345 - service.pdf_processor - INFO - TRACE result=SUCCESS src=C:\Shinseikai\BarcodePDF\processing\scan001.pdf barcode=1234567890 dst=C:\pdfkarte\TmpPdf\1234567890.pdf
-2026-09-01 18:31:05,120 - service.pdf_processor - INFO - TRACE result=NO_BARCODE src=C:\Shinseikai\BarcodePDF\processing\scan002.pdf barcode= dst=C:\Shinseikai\BarcodePDF\error\scan002.pdf
+2026-09-01 18:30:12,345 - service.pdf_processor - INFO - TRACE result=SUCCESS src=C:\Shinseikai\BarcodePDF\preprocessing\scan001.pdf barcode=1234567890 dst=C:\pdfkarte\TmpPdf\1234567890.pdf
+2026-09-01 18:31:05,120 - service.pdf_processor - INFO - TRACE result=NO_BARCODE src=C:\Shinseikai\BarcodePDF\preprocessing\scan002.pdf barcode= dst=C:\Shinseikai\BarcodePDF\error\scan002.pdf
 ```
 
 - `result`: `SUCCESS`（完了フォルダへ移動）/ `NO_BARCODE`（バーコード未検出）/ `ERROR`（処理中に例外）
@@ -195,7 +190,8 @@ main.py                       : エントリポイント
 ├── service/
 │   ├── barcode_reader.py     : PDFの上部帯をレンダリングしてCODE128読み取り
 │   │                           (高解像度・ノイズ除去・最大幅優先)
-│   └── pdf_processor.py      : process_pdf / PDFHandler（振り分けとトレースログ）
+│   ├── pdf_processor.py      : process_pdf（振り分けとトレースログ）
+│   └── pdf_watcher.py        : PdfWatcher（取込フォルダのポーリング監視）
 └── utils/
     ├── config_manager.py     : ConfigManager / AppConfig（config.ini の読み書き）
     ├── log_rotation.py       : setup_logging（日次ローテーションと古いログの削除）
@@ -207,7 +203,6 @@ main.py                       : エントリポイント
 - **fitz (PyMuPDF)**: PDF処理
 - **pyzbar**: バーコード読み取り
 - **opencv-python**: 画像処理
-- **watchdog**: ファイル監視
 - **tkinter**: GUI
 
 ### カスタマイズ

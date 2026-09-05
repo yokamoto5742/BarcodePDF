@@ -1,13 +1,10 @@
-"""バーコード読み取り結果に応じたPDFの振り分けとフォルダ監視"""
+"""バーコード読み取り結果に応じたPDFの振り分け"""
 
 import logging
 import os
 import shutil
 import subprocess
-import time
 from collections.abc import Callable
-
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
 
 from service.barcode_reader import read_barcode_from_pdf
 from utils.config_manager import AppConfig
@@ -19,7 +16,6 @@ from utils.constants import (
     MSG_MOVED_TO_ERROR,
     MSG_OPEN_ERROR_FOLDER_FAILED,
     MSG_OPEN_ERROR_FOLDER_UNSUPPORTED,
-    MSG_PDF_DETECTED,
     MSG_PROCESS_DONE,
     MSG_PROCESS_ERROR,
     MSG_PROCESSING_START,
@@ -33,9 +29,6 @@ from utils.constants import (
 logger = logging.getLogger(__name__)
 
 StatusCallback = Callable[[str], None]
-
-# 書き込み途中のファイルを読むと失敗するため、検出後に待機する秒数
-FILE_WRITE_WAIT_SECONDS = 1
 
 # Windowsのファイル名に使用できない文字とデバイス名
 INVALID_FILENAME_CHARS = '<>:"/\\|?*'
@@ -172,23 +165,3 @@ def process_pdf(pdf_path: str, config: AppConfig, status_callback: StatusCallbac
         status_callback(message)
         _handle_failed_file(pdf_path, config, status_callback)
 
-
-class PDFHandler(FileSystemEventHandler):
-    def __init__(self, config: AppConfig, status_callback: StatusCallback) -> None:
-        self.config = config
-        self.status_callback = status_callback
-
-    def on_created(self, event: FileSystemEvent) -> None:
-        if event.is_directory:
-            return
-
-        src_path = str(event.src_path)
-        if not src_path.lower().endswith('.pdf'):
-            return
-
-        message = MSG_PDF_DETECTED.format(path=src_path)
-        logger.info(message)
-        self.status_callback(message)
-
-        time.sleep(FILE_WRITE_WAIT_SECONDS)
-        process_pdf(src_path, self.config, self.status_callback)
